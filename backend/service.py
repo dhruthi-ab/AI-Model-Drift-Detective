@@ -8,7 +8,6 @@ from sklearn.metrics import accuracy_score, f1_score, roc_auc_score
 import drift as D
 from train import ART, train
 
-
 class DriftService:
     def __init__(self):
         self.lock = threading.Lock()
@@ -21,7 +20,7 @@ class DriftService:
         self.cfg = json.load(open(os.path.join(ART, "config.json")))
         self.num, self.cat = self.cfg["num_cols"], self.cfg["cat_cols"]
         self.target = self.cfg["target"]
-        self.ref_full = pd.read_csv(os.path.join(ART, "reference.csv"))   # features + label
+        self.ref_full = pd.read_csv(os.path.join(ART, "reference_2000.csv"))   # features + label
         self.ref = self.ref_full[self.num + self.cat]
         self.ref_proba = self.model.predict_proba(self.ref)[:, 1]
 
@@ -97,3 +96,4 @@ class DriftService:
         self.history.append(dict(label="RETRAINED", score=0, level="healthy",
                                  accuracy=self.cfg["baseline"]["accuracy"]))
         return self.cfg["baseline"]
+

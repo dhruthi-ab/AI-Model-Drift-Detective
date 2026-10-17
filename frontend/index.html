@@ -118,7 +118,35 @@ function render(r) {
   ['banner','kpis','charts'].forEach(i => $(i).hidden = false);
   $('lvl').className = 'badge ' + r.level; $('lvl').textContent = r.level;
   $('lvltxt').textContent = `${r.n_rows} rows analysed (${r.label})`;
-  $('recs').innerHTML = r.recommendations.map(x => `<li>${x}</li>`).join('');
+  const drifted = r.features.filter(f => f.status === 'drift').length;
+  const warnings = r.features.filter(f => f.status === 'warning').length;
+  const reasons = [];
+
+  if (r.auc_drop !== null && r.auc_drop >= 0.06) {
+    reasons.push(`AUC dropped ${(r.auc_drop * 100).toFixed(1)} percentage points`);
+  }
+  if (r.prediction.psi >= 0.25) {
+    reasons.push(`Prediction drift is high (PSI ${r.prediction.psi})`);
+  }
+  if (drifted / Math.max(r.features.length, 1) >= 0.3) {
+    reasons.push(`${drifted} features show significant drift`);
+  }
+  if (reasons.length === 0 && warnings > 0) {
+    reasons.push(`${warnings} features show warning-level distribution shifts`);
+  }
+  if (reasons.length === 0 && r.prediction.psi >= 0.10) {
+    reasons.push(`Prediction distribution shifted (PSI ${r.prediction.psi})`);
+  }
+  if (reasons.length === 0 && r.level === 'healthy') {
+    reasons.push('No significant drift detected');
+  }
+  if (reasons.length === 0) {
+    reasons.push('Combined drift score triggered this alert');
+  }
+
+  $('lvltxt').textContent =
+    `${r.n_rows} rows analysed (${r.label}) — ${reasons.join('; ')}`;  
+$('recs').innerHTML = r.recommendations.map(x => `<li>${x}</li>`).join('');
   const nd = r.features.filter(f => f.status === 'drift').length;
   $('k1').textContent = r.score; $('k2').textContent = `${nd} / ${r.features.length}`;
   $('k3').textContent = r.prediction.psi;

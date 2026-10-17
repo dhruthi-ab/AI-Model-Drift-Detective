@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Model Drift Detective</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root { --bg:#f5f7fa; --card:#fff; --text:#1c2733; --muted:#6b7785; --line:#e3e8ee;
+          --green:#198754; --amber:#d98e04; --red:#d63031; --blue:#0f62fe; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#12161c; --card:#1c222b; --text:#e8edf3; --muted:#93a0ae; --line:#2c3541; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--text); }
+  header { padding:18px 24px; border-bottom:1px solid var(--line); background:var(--card); }
+  header h1 { margin:0; font-size:20px; } header p { margin:4px 0 0; color:var(--muted); font-size:13px; }
+  main { max-width:1200px; margin:0 auto; padding:20px; display:grid; gap:16px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; }
+  .controls { display:flex; flex-wrap:wrap; gap:16px; align-items:center; }
+  .controls label { font-size:13px; color:var(--muted); }
+  button, .filebtn { background:var(--blue); color:#fff; border:0; padding:9px 16px; border-radius:8px; cursor:pointer; font-size:14px; }
+  button.secondary { background:transparent; color:var(--blue); border:1px solid var(--blue); }
+  input[type=file] { display:none; }
+  .banner { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; }
+  .badge { padding:3px 10px; border-radius:99px; font-size:12px; font-weight:600; color:#fff; text-transform:uppercase; }
+  .healthy,.stable{background:var(--green)} .warning{background:var(--amber)} .critical,.drift{background:var(--red)}
+  .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px; }
+  .kpi small { color:var(--muted); display:block; font-size:12px; } .kpi b { font-size:24px; }
+  .grid2 { display:grid; grid-template-columns:repeat(auto-fit,minmax(420px,1fr)); gap:16px; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th,td { text-align:left; padding:8px; border-bottom:1px solid var(--line); } th { color:var(--muted); font-weight:500; }
+  .chartbox { position:relative; height:280px; } .scroll { overflow-x:auto; }
+  ul { margin:6px 0 0 18px; padding:0; } li { margin:4px 0; font-size:14px; }
+  select { padding:6px; border-radius:6px; border:1px solid var(--line); background:var(--card); color:var(--text); }
+  #msg { color:var(--muted); font-size:13px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🕵️ AI Model Drift Detective</h1>
+  <p>Monitors a deployed churn model for data drift, prediction drift and performance decay.</p>
+</header>
+<main>
+  <section class="card controls">
+    <div>
+      <label for="drift">Simulated drift: <b id="dv">0.50</b></label><br>
+      <input type="range" id="drift" min="0" max="1" step="0.05" value="0.5" oninput="dv.textContent=(+this.value).toFixed(2)">
+    </div>
+    <button onclick="simulate()">Simulate production batch</button>
+    <label class="filebtn secondary" style="background:transparent;color:var(--blue);border:1px solid var(--blue)">
+      Upload CSV batch <input type="file" accept=".csv" onchange="upload(this.files[0])"></label>
+    <button class="secondary" onclick="retrain()">Retrain model</button>
+    <span id="msg">Baseline loading…</span>
+  </section>
+
+  <section class="card banner" id="banner" hidden>
+    <div><span class="badge" id="lvl"></span> <b id="lvltxt" style="margin-left:8px"></b>
+      <ul id="recs"></ul></div>
+  </section>
+
+  <section class="kpis" id="kpis" hidden>
+    <div class="card kpi"><small>Drift score (0-100)</small><b id="k1"></b></div>
+    <div class="card kpi"><small>Features drifted</small><b id="k2"></b></div>
+    <div class="card kpi"><small>Prediction PSI</small><b id="k3"></b></div>
+    <div class="card kpi"><small>AUC (baseline → now)</small><b id="k4"></b></div>
+  </section>
+
+  <div class="grid2" id="charts" hidden>
+    <section class="card"><b>Feature drift (PSI)</b><div class="chartbox"><canvas id="psiChart"></canvas></div>
+      <small style="color:var(--muted)">PSI &lt; 0.10 stable · 0.10-0.25 warning · &gt; 0.25 drift</small></section>
+    <section class="card"><b>Distribution: training vs production</b>
+      <select id="featSel" onchange="drawDist()" style="margin-left:8px"></select>
+      <div class="chartbox"><canvas id="distChart"></canvas></div></section>
+    <section class="card"><b>Feature details</b><div class="scroll"><table id="tbl"></table></div></section>
+    <section class="card"><b>Drift score over time</b><div class="chartbox"><canvas id="histChart"></canvas></div></section>
+  </div>
+</main>
+
+<script>
+let R = null, charts = {};
+const $ = id => document.getElementById(id);
+const COL = { stable:'#198754', warning:'#d98e04', drift:'#d63031' };
+
+async function api(path, opts) {
+  const res = await fetch('/api' + path, opts);
+  if (!res.ok) throw new Error((await res.json()).detail || res.statusText);
+  return res.json();
+}
+const busy = t => $('msg').textContent = t;
+
+async function init() {
+  const b = await api('/baseline');
+  busy(`Baseline model — AUC ${b.baseline.auc}, accuracy ${b.baseline.accuracy}. Drag the slider and simulate a batch.`);
+}
+async function simulate() {
+  busy('Analysing…');
+  try { render(await api(`/simulate?drift=${$('drift').value}`, { method:'POST' })); busy('Done.'); }
+  catch (e) { busy('Error: ' + e.message); }
+}
+async function upload(file) {
+  if (!file) return; busy('Analysing ' + file.name + '…');
+  const fd = new FormData(); fd.append('file', file);
+  try { render(await api('/analyze', { method:'POST', body:fd })); busy('Done.'); }
+  catch (e) { busy('Error: ' + e.message); }
+}
+async function retrain() {
+  busy('Retraining…');
+  try { const r = await api('/retrain', { method:'POST' });
+        busy(`Retrained. New baseline AUC ${r.new_baseline.auc}. Re-run a batch to compare.`); }
+  catch (e) { busy('Error: ' + e.message); }
+}
+
+function make(id, cfg) { if (charts[id]) charts[id].destroy(); charts[id] = new Chart($(id), cfg); }
+
+function render(r) {
+  R = r;
+  ['banner','kpis','charts'].forEach(i => $(i).hidden = false);
+  $('lvl').className = 'badge ' + r.level; $('lvl').textContent = r.level;
+  $('lvltxt').textContent = `${r.n_rows} rows analysed (${r.label})`;
+  $('recs').innerHTML = r.recommendations.map(x => `<li>${x}</li>`).join('');
+  const nd = r.features.filter(f => f.status === 'drift').length;
+  $('k1').textContent = r.score; $('k2').textContent = `${nd} / ${r.features.length}`;
+  $('k3').textContent = r.prediction.psi;
+  $('k4').textContent = r.performance ? `${r.baseline.auc} → ${r.performance.auc}` : 'no labels';
+
+  make('psiChart', { type:'bar',
+    data:{ labels:r.features.map(f => f.feature),
+           datasets:[{ data:r.features.map(f => f.psi), backgroundColor:r.features.map(f => COL[f.status]) }] },
+    options:{ indexAxis:'y', plugins:{ legend:{ display:false } }, maintainAspectRatio:false } });
+
+  $('tbl').innerHTML = '<tr><th>Feature</th><th>Type</th><th>PSI</th><th>Test</th><th>p-value</th><th>Status</th></tr>' +
+    r.features.map(f => `<tr><td>${f.feature}</td><td>${f.type}</td><td>${f.psi}</td><td>${f.test}</td>
+      <td>${f.p_value < 0.001 ? '<0.001' : f.p_value.toFixed(3)}</td><td><span class="badge ${f.status}">${f.status}</span></td></tr>`).join('');
+
+  const names = r.features.map(f => f.feature).concat('prediction_score');
+  const keep = $('featSel').value;
+  $('featSel').innerHTML = names.map(n => `<option>${n}</option>`).join('');
+  if (names.includes(keep)) $('featSel').value = keep; else $('featSel').value = r.features[0].feature;
+  drawDist();
+
+  make('histChart', { type:'line',
+    data:{ labels:r.history.map((h, i) => `${i + 1}. ${h.label}`),
+           datasets:[{ label:'Drift score', data:r.history.map(h => h.score), borderColor:'#0f62fe', tension:.3 }] },
+    options:{ maintainAspectRatio:false, scales:{ y:{ min:0, max:100 } } } });
+}
+
+function drawDist() {
+  const d = R.distributions[$('featSel').value];
+  make('distChart', { type:'bar',
+    data:{ labels:d.labels, datasets:[
+      { label:'Training (reference)', data:d.ref, backgroundColor:'#8aa4c8' },
+      { label:'Production (current)', data:d.cur, backgroundColor:'#f08a24' } ] },
+    options:{ maintainAspectRatio:false, scales:{ y:{ title:{ display:true, text:'% of rows' } } } } });
+}
+init();
+</script>
+</body>
+</html>

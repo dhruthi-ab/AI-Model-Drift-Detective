@@ -12,9 +12,9 @@
   ],
   "target": "churn",
   "baseline": {
-    "accuracy": 0.7045,
-    "f1": 0.4671,
-    "auc": 0.7396
+    "accuracy": 0.704,
+    "f1": 0.477,
+    "auc": 0.7126
   },
-  "n_train": 6000
+  "n_train": 3000
 }
