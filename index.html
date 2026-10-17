@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ChurnGuard AI - ML Observability & Silent Degradation Platform</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #070b14;
+      --surface: #0e1526;
+      --surface-card: #131c31;
+      --surface-hover: #1a2642;
+      --border: #1e2b48;
+      --border-light: #2c3d63;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --primary-glow: rgba(59, 130, 246, 0.25);
+      --danger: #ef4444;
+      --danger-bg: rgba(239, 68, 68, 0.12);
+      --warning: #f59e0b;
+      --warning-bg: rgba(245, 158, 11, 0.12);
+      --success: #10b981;
+      --success-bg: rgba(16, 185, 129, 0.12);
+      --purple: #8b5cf6;
+      --cyan: #06b6d4;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .font-mono { font-family: 'JetBrains Mono', monospace; }
+
+    ::-webkit-scrollbar { width: 7px; height: 7px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+    #auth-view {
+      display: flex;
+      min-height: 100vh;
+      width: 100%;
+      background: radial-gradient(circle at 15% 20%, rgba(59, 130, 246, 0.08) 0%, transparent 40%),
+                  radial-gradient(circle at 85% 80%, rgba(139, 92, 246, 0.08) 0%, transparent 40%),
+                  var(--bg);
+    }
+
+    .auth-hero-pane {
+      flex: 1.2;
+      background: linear-gradient(145deg, #0a0f1d, #0d1629);
+      border-right: 1px solid var(--border);
+      padding: 3.5rem 4rem;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    @media (max-width: 1024px) {
+      .auth-hero-pane { display: none; }
+    }
+
+    .auth-form-pane {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2.5rem;
+    }
+
+    .auth-card {
+      background: var(--surface-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 2.5rem;
+      width: 100%;
+      max-width: 460px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
+    }
+
+    .auth-tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 1.5rem;
+    }
+
+    .auth-tab-btn {
+      flex: 1;
+      padding: 0.75rem;
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-weight: 700;
+      font-size: 0.9rem;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s;
+    }
+
+    .auth-tab-btn.active {
+      color: var(--primary);
+      border-bottom-color: var(--primary);
+    }
+
+    .form-group {
+      margin-bottom: 1.15rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+
+    .form-group label {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    .form-input {
+      background: var(--surface);
+      border: 1px solid var(--border-light);
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      color: var(--text);
+      font-size: 0.9rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .form-input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px var(--primary-glow);
+    }
+
+    .input-password-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .input-password-wrapper input {
+      width: 100%;
+      padding-right: 2.5rem;
+    }
+
+    .toggle-pwd-btn {
+      position: absolute;
+      right: 0.75rem;
+      background: none;
+      border: none;
+      color: var(--text-dim);
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+
+    .form-extras {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.25rem;
+      font-size: 0.8rem;
+    }
+
+    .btn-submit-auth {
+      width: 100%;
+      padding: 0.85rem;
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      color: white;
+      font-size: 0.95rem;
+      font-weight: 700;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      box-shadow: 0 4px 15px rgba(37, 99, 235, 0.35);
+      transition: all 0.2s;
+    }
+
+    .btn-submit-auth:hover {
+      background: linear-gradient(135deg, #3b82f6, #2563eb);
+    }
+
+    .db-badge-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.2rem 0.5rem;
+      border-radius: 6px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      background: rgba(16, 185, 129, 0.12);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      color: #34d399;
+      margin-bottom: 1rem;
+    }
+
+    .demo-credentials-box {
+      margin-top: 1.25rem;
+      padding: 1rem;
+      background: var(--surface);
+      border: 1px dashed var(--border-light);
+      border-radius: 10px;
+    }
+
+    .demo-login-btn {
+      width: 100%;
+      padding: 0.5rem;
+      margin-top: 0.5rem;
+      background: rgba(59, 130, 246, 0.12);
+      border: 1px solid rgba(59, 130, 246, 0.3);
+      color: #93c5fd;
+      font-size: 0.78rem;
+      font-weight: 600;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    .demo-login-btn:hover {
+      background: rgba(59, 130, 246, 0.25);
+    }
+
+    #app-view {
+      display: none;
+      min-height: 100vh;
+      flex-direction: column;
+    }
+
+    .app-header {
+      background: rgba(14, 21, 38, 0.88);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      padding: 0.75rem 1.75rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1.5rem;
+    }
+
+    .app-logo-badge {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      color: white;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .nav-link-btn {
+      padding: 0.45rem 0.85rem;
+      border-radius: 8px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      background: transparent;
+      border: 1px solid transparent;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      transition: all 0.2s;
+    }
+
+    .nav-link-btn:hover {
+      color: var(--text);
+      background: var(--surface-card);
+    }
+
+    .nav-link-btn.active {
+      color: #60a5fa;
+      background: rgba(59, 130, 246, 0.15);
+      border-color: rgba(59, 130, 246, 0.3);
+    }
+
+    .user-avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #4f46e5, #06b6d4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 0.85rem;
+      color: white;
+      cursor: pointer;
+      border: 2px solid var(--border-light);
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      padding: 0.45rem 0.95rem;
+      border-radius: 8px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s ease;
+      text-decoration: none;
+    }
+    .btn-primary { background: linear-gradient(135deg, #2563eb, #1d4ed8); color: white; }
+    .btn-primary:hover { background: linear-gradient(135deg, #3b82f6, #2563eb); }
+    .btn-danger { background: linear-gradient(135deg, #dc2626, #b91c1c); color: white; }
+    .btn-secondary { background: var(--surface-card); color: var(--text); border: 1px solid var(--border-light); }
+    .btn-secondary:hover { background: var(--surface-hover); }
+
+    .status-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background-color: var(--danger);
+      animation: pulse 2s infinite;
+    }
+    .status-dot.healthy { background-color: var(--success); }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+    .dashboard-body {
+      max-width: 1600px;
+      margin: 0 auto;
+      padding: 1.5rem 1.75rem 3rem;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    .alert-banner {
+      background: linear-gradient(90deg, rgba(239, 68, 68, 0.15), rgba(15, 23, 42, 0.95));
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      border-left: 5px solid var(--danger);
+      border-radius: 12px;
+      padding: 1.15rem 1.5rem;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 1.25rem;
+    }
+
+    .metric-badge {
+      font-size: 0.7rem; padding: 0.15rem 0.5rem; border-radius: 9999px; font-weight: 700;
+    }
+    .badge-danger { background: var(--danger-bg); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
+    .badge-warning { background: var(--warning-bg); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
+    .badge-success { background: var(--success-bg); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
+
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.25rem;
+    }
+
+    .metric-card {
+      background: var(--surface-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+    }
+    .metric-card.critical { border-top: 3px solid var(--danger); }
+
+    .metric-value { font-size: 2.1rem; font-weight: 800; line-height: 1; margin: 0.4rem 0; }
+    .threshold-bar { height: 6px; background: #1e2b48; border-radius: 999px; margin: 0.6rem 0; overflow: hidden; }
+    .threshold-fill { height: 100%; border-radius: 999px; }
+
+    .charts-grid-two {
+      display: grid;
+      grid-template-columns: 1.25fr 1fr;
+      gap: 1.5rem;
+    }
+    @media (max-width: 1100px) { .charts-grid-two { grid-template-columns: 1fr; } }
+
+    .panel {
+      background: var(--surface-card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1.5rem;
+      display: flex;
+      flex-direction: column;
+    }
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 1.25rem;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .panel-title { font-size: 1.05rem; font-weight: 700; display: flex; align-items: center; gap: 0.5rem; }
+    .panel-subtitle { font-size: 0.8rem; color: var(--text-muted); margin-top: 0.2rem; }
+
+    .table-container { overflow-x: auto; border-radius: 8px; border: 1px solid var(--border); }
+    table { width: 100%; border-collapse: collapse; text-align: left; font-size: 0.82rem; }
+    th {
+      background: var(--surface); color: var(--text-muted); font-weight: 600;
+      padding: 0.75rem 1rem; border-bottom: 1px solid var(--border); font-size: 0.72rem; text-transform: uppercase;
+    }
+    td { padding: 0.75rem 1rem; border-bottom: 1px solid var(--border); }
+    tr:last-child td { border-bottom: none; }
+
+    .tab-bar { display: flex; gap: 0.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; }
+    .tab-btn {
+      padding: 0.45rem 0.95rem; border-radius: 8px; font-size: 0.82rem; font-weight: 600;
+      color: var(--text-muted); background: transparent; border: none; cursor: pointer;
+    }
+    .tab-btn.active { color: #60a5fa; background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.3); }
+
+    .profile-dropdown {
+      display: none; position: absolute; right: 0; top: 125%; width: 220px;
+      background: var(--surface-card); border: 1px solid var(--border-light);
+      border-radius: 10px; padding: 0.5rem; box-shadow: 0 10px 25px rgba(0,0,0,0.4); z-index: 60;
+    }
+    .profile-dropdown.show { display: block; }
+    .profile-item {
+      padding: 0.5rem 0.75rem; font-size: 0.8rem; border-radius: 6px; cursor: pointer;
+      display: flex; align-items: center; gap: 0.5rem; color: var(--text-muted);
+    }
+    .profile-item:hover { background: var(--surface-hover); color: var(--text); }
+  </style>
+</head>
+<body>
+
+  <!-- AUTH VIEW -->
+  <div id="auth-view">
+    <div class="auth-hero-pane">
+      <div>
+        <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 2rem;">
+          <div class="app-logo-badge">CG</div>
+          <span style="font-size: 1.25rem; font-weight: 800; letter-spacing: -0.02em;">ChurnGuard AI</span>
+        </div>
+        <h2 style="font-size: 2.3rem; font-weight: 800; line-height: 1.2; margin-bottom: 1rem;">
+          Detect Silent ML Model Degradation <span style="background: linear-gradient(135deg, #60a5fa, #a78bfa); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Before Customers Leave</span>.
+        </h2>
+        <p style="color: var(--text-muted); font-size: 1.05rem; max-width: 520px; line-height: 1.6;">
+          Ground truth churn labels take 60–90 days to mature. ChurnGuard monitors production distributions, confidence collapse, and covariate drift in real time.
+        </p>
+      </div>
+
+      <div style="background: rgba(19, 28, 49, 0.7); border: 1px solid var(--border); border-radius: 14px; padding: 1.5rem; margin: 2rem 0;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+          <span style="font-size: 0.75rem; color: var(--text-dim); text-transform: uppercase; font-weight: 700;">Database-Backed Authentication</span>
+          <span class="metric-badge badge-success">ACTIVE STORAGE</span>
+        </div>
+        <div style="font-size: 0.95rem; font-weight: 700;">Persistent User Credential & Sign-In History</div>
+        <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.25rem;">
+          Registrations, passwords (salted SHA-256), and login timestamps are permanently stored in the database.
+        </p>
+      </div>
+
+      <div style="display: flex; gap: 2rem; font-size: 0.85rem; color: var(--text-dim);">
+        <div>🔒 SHA-256 Hashing</div>
+        <div>🗄️ SQLite / IndexedDB</div>
+        <div>⚡ Audit Log Tracking</div>
+      </div>
+    </div>
+
+    <div class="auth-form-pane">
+      <div class="auth-card">
+        <div style="text-align: center; margin-bottom: 1.25rem;">
+          <div class="db-badge-indicator">
+            <span>●</span> <span>Database Active: Persistent Storage</span>
+          </div>
+          <h3 style="font-size: 1.4rem; font-weight: 800; margin-bottom: 0.35rem;" id="authHeaderTitle">Welcome Back</h3>
+          <p style="font-size: 0.82rem; color: var(--text-muted);">Sign in to access your ML Observability workspace</p>
+        </div>
+
+        <div class="auth-tabs">
+          <button class="auth-tab-btn active" id="tabSignIn" onclick="setAuthMode('signin')">Sign In</button>
+          <button class="auth-tab-btn" id="tabSignUp" onclick="setAuthMode('signup')">Create Account</button>
+        </div>
+
+        <div id="authAlert" style="display: none; padding: 0.65rem 0.85rem; border-radius: 8px; margin-bottom: 1rem; font-size: 0.82rem;"></div>
+
+        <form onsubmit="handleAuthSubmit(event)">
+          <div class="form-group" id="fullNameGroup" style="display: none;">
+            <label for="regName">Full Name</label>
+            <input type="text" id="regName" class="form-input" placeholder="e.g. Sarah Lin">
+          </div>
+
+          <div class="form-group" id="roleGroup" style="display: none;">
+            <label for="regRole">Role</label>
+            <select id="regRole" class="form-input" style="background: var(--surface);">
+              <option value="Lead MLOps Engineer">Lead MLOps Engineer</option>
+              <option value="Senior Data Scientist">Senior Data Scientist</option>
+              <option value="ML Auditor">ML Auditor</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="authEmail">Work Email</label>
+            <input type="email" id="authEmail" class="form-input" required value="sarah.lin@mlops.corp">
+          </div>
+
+          <div class="form-group">
+            <label for="authPassword">Password</label>
+            <div class="input-password-wrapper">
+              <input type="password" id="authPassword" class="form-input" required value="DemoSecure2026!">
+              <button type="button" class="toggle-pwd-btn" onclick="togglePasswordVisibility()">👁</button>
+            </div>
+          </div>
+
+          <div class="form-extras">
+            <label style="display: flex; align-items: center; gap: 0.5rem; color: var(--text-muted); cursor: pointer;">
+              <input type="checkbox" checked>
+              <span>Remember me for 30 days</span>
+            </label>
+            <a href="javascript:void(0)" onclick="alert('Password reset link sent in demo.')" style="color: #60a5fa; text-decoration: none;">Forgot password?</a>
+          </div>
+
+          <button type="submit" class="btn-submit-auth" id="btnSubmitAuth">Sign In to Dashboard →</button>
+        </form>
+
+        <div class="demo-credentials-box">
+          <div style="font-size: 0.75rem; font-weight: 700; color: var(--text-dim); text-transform: uppercase;">⚡ 1-Click Demo Profiles</div>
+          <button type="button" class="demo-login-btn" onclick="quickLogin('sarah.lin@mlops.corp', 'DemoSecure2026!')">
+            👤 Sarah Lin (Lead MLOps Engineer)
+          </button>
+          <button type="button" class="demo-login-btn" style="background: rgba(139, 92, 246, 0.12); border-color: rgba(139, 92, 246, 0.3); color: #c4b5fd;" onclick="quickLogin('alex.rivera@datascience.corp', 'DemoSecure2026!')">
+            🔬 Alex Rivera (Senior Data Scientist)
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN APP -->
+  <div id="app-view">
+    <header class="app-header">
+      <div style="display: flex; align-items: center; gap: 1.5rem;">
+        <div style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer;" onclick="switchNavSection('monitor')">
+          <div class="app-logo-badge">CG</div>
+          <div>
+            <h1 style="font-size: 1.05rem; font-weight: 800; line-height: 1.2;">ChurnGuard AI</h1>
+            <span style="font-size: 0.7rem; color: var(--text-dim); letter-spacing: 0.05em; font-weight: 700;">ENTERPRISE MLOPS</span>
+          </div>
+        </div>
+
+        <nav class="nav-links">
+          <button class="nav-link-btn active" id="navMonitor" onclick="switchNavSection('monitor')">
+            📊 Model Telemetry
+          </button>
+          <button class="nav-link-btn" id="navDatabase" onclick="switchNavSection('database')">
+            🗄️ User Database <span class="metric-badge badge-success" id="userCountBadge" style="font-size: 0.65rem; padding: 0.1rem 0.35rem;">3</span>
+          </button>
+        </nav>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 1rem;">
+        <div style="position: relative;" class="user-profile-menu">
+          <div class="user-avatar" id="headerUserAvatar" onclick="toggleProfileDropdown()">SL</div>
+          <div class="profile-dropdown" id="profileDropdown">
+            <div style="padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border); margin-bottom: 0.35rem;">
+              <strong id="dropUserName" style="font-size: 0.85rem; display: block;">Sarah Lin</strong>
+              <span id="dropUserRole" style="font-size: 0.72rem; color: var(--text-dim);">Lead MLOps Engineer</span>
+            </div>
+            <div class="profile-item" onclick="switchNavSection('database')">🗄️ User Database</div>
+            <div class="profile-item" style="color: #f87171;" onclick="handleSignOut()">🚪 Sign Out</div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main class="dashboard-body" id="section-monitor">
+      <div class="panel" style="border-left: 4px solid var(--danger);">
+        <strong style="color: #f87171;">CRITICAL: Silent Concept Drift Detected</strong>
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.25rem;">
+          PSI = 0.284 • Estimated AUC decay: -20.0% • 526 unflagged high-value churners
+        </p>
+      </div>
+
+      <div class="metrics-grid">
+        <div class="metric-card critical">
+          <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 700;">POPULATION STABILITY (PSI)</span>
+          <div class="metric-value">0.284</div>
+          <div class="threshold-bar"><div class="threshold-fill" style="width: 85%; background: var(--danger);"></div></div>
+          <div style="font-size: 0.75rem; color: var(--text-dim);">Critical drift (&gt; 0.20)</div>
+        </div>
+
+        <div class="metric-card critical">
+          <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 700;">ESTIMATED ROC-AUC (CBPE)</span>
+          <div class="metric-value">0.714</div>
+          <div class="threshold-bar"><div class="threshold-fill" style="width: 65%; background: var(--danger);"></div></div>
+          <div style="font-size: 0.75rem; color: var(--text-dim);">-20.0% performance decay</div>
+        </div>
+
+        <div class="metric-card critical">
+          <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 700;">MONTHLY REVENUE AT RISK</span>
+          <div class="metric-value">$342,000</div>
+          <div class="threshold-bar"><div class="threshold-fill" style="width: 80%; background: #f43f5e;"></div></div>
+          <div style="font-size: 0.75rem; color: var(--text-dim);">High-value unflagged churners</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title" style="margin-bottom: 1rem;">Feature Covariate Shift Matrix</div>
+        <div class="table-container">
+          <table>
+            <thead><tr><th>Feature</th><th>Importance</th><th>Baseline</th><th>Production</th><th>Status</th></tr></thead>
+            <tbody>
+              <tr><td><strong>tenure_months</strong></td><td>28%</td><td>32.4 mo</td><td>23.1 mo</td><td><span class="metric-badge badge-danger">CRITICAL</span></td></tr>
+              <tr><td><strong>monthly_charges</strong></td><td>22%</td><td>$64.76</td><td>$79.40</td><td><span class="metric-badge badge-warning">WARNING</span></td></tr>
+              <tr><td><strong>support_tickets_30d</strong></td><td>19%</td><td>1.25</td><td>2.40</td><td><span class="metric-badge badge-danger">CRITICAL</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+
+    <main class="dashboard-body" id="section-database" style="display: none;">
+      <div class="panel">
+        <div class="panel-header">
+          <div>
+            <div class="panel-title">🗄️ Stored User Accounts & Authentication Database</div>
+            <div class="panel-subtitle">Persistent user credentials with salted SHA-256 encryption</div>
+          </div>
+          <button class="btn btn-secondary" onclick="exportDatabaseJSON()">📥 Export JSON Backup</button>
+        </div>
+
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>User ID</th>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Role</th>
+                <th>Password Hash (SHA-256)</th>
+                <th>Last Login</th>
+                <th>Total Logins</th>
+              </tr>
+            </thead>
+            <tbody id="dbUsersTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const DB_STORAGE_KEY_USERS = "churnguard_users_db";
+    let authMode = 'signin';
+    let currentUser = null;
+
+    async function hashPassword(str) {
+      const msgBuffer = new TextEncoder().encode(str);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+      return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    async function initDatabase() {
+      let users = JSON.parse(localStorage.getItem(DB_STORAGE_KEY_USERS) || "[]");
+      if (users.length === 0) {
+        const defaultHash = await hashPassword("DemoSecure2026!");
+        const now = new Date().toISOString();
+        users = [
+          { id: 1, name: "Sarah Lin", email: "sarah.lin@mlops.corp", passwordHash: defaultHash, role: "Lead MLOps Engineer", lastLogin: now, loginCount: 1 },
+          { id: 2, name: "Alex Rivera", email: "alex.rivera@datascience.corp", passwordHash: defaultHash, role: "Senior Data Scientist", lastLogin: now, loginCount: 1 }
+        ];
+        localStorage.setItem(DB_STORAGE_KEY_USERS, JSON.stringify(users));
+      }
+      updateDatabaseUI();
+    }
+
+    function updateDatabaseUI() {
+      const users = JSON.parse(localStorage.getItem(DB_STORAGE_KEY_USERS) || "[]");
+      document.getElementById("userCountBadge").textContent = users.length;
+      const tbody = document.getElementById("dbUsersTableBody");
+      if (tbody) {
+        tbody.innerHTML = "";
+        users.forEach(u => {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td class="font-mono" style="color: #60a5fa;">#UID-${u.id}</td>
+            <td style="font-weight: 700;">${u.name}</td>
+            <td class="font-mono">${u.email}</td>
+            <td><span class="metric-badge badge-warning">${u.role}</span></td>
+            <td class="font-mono" style="color: var(--text-dim); font-size: 0.7rem;">${u.passwordHash.slice(0, 14)}...</td>
+            <td style="color: #34d399;">${new Date(u.lastLogin).toLocaleTimeString()}</td>
+            <td><strong>${u.loginCount || 1}</strong></td>
+          `;
+          tbody.appendChild(tr);
+        });
+      }
+    }
+
+    function setAuthMode(mode) {
+      authMode = mode;
+      document.getElementById("tabSignIn").className = "auth-tab-btn " + (mode === 'signin' ? "active" : "");
+      document.getElementById("tabSignUp").className = "auth-tab-btn " + (mode === 'signup' ? "active" : "");
+      document.getElementById("fullNameGroup").style.display = mode === 'signup' ? "flex" : "none";
+      document.getElementById("roleGroup").style.display = mode === 'signup' ? "flex" : "none";
+      document.getElementById("btnSubmitAuth").textContent = mode === 'signup' ? "Save to Database & Sign In →" : "Sign In to Dashboard →";
+    }
+
+    function togglePasswordVisibility() {
+      const pwd = document.getElementById("authPassword");
+      pwd.type = pwd.type === "password" ? "text" : "password";
+    }
+
+    async function handleAuthSubmit(e) {
+      e.preventDefault();
+      const email = document.getElementById("authEmail").value.trim().toLowerCase();
+      const pwd = document.getElementById("authPassword").value;
+      const hash = await hashPassword(pwd);
+      let users = JSON.parse(localStorage.getItem(DB_STORAGE_KEY_USERS) || "[]");
+
+      if (authMode === 'signup') {
+        const name = document.getElementById("regName").value || "MLOps Engineer";
+        const role = document.getElementById("regRole").value;
+        const newUser = { id: users.length + 1, name, email, passwordHash: hash, role, lastLogin: new Date().toISOString(), loginCount: 1 };
+        users.push(newUser);
+        localStorage.setItem(DB_STORAGE_KEY_USERS, JSON.stringify(users));
+        enterDashboard(newUser);
+      } else {
+        const user = users.find(u => u.email === email && u.passwordHash === hash);
+        if (!user) { alert("Invalid credentials in database!"); return; }
+        user.lastLogin = new Date().toISOString();
+        user.loginCount = (user.loginCount || 0) + 1;
+        localStorage.setItem(DB_STORAGE_KEY_USERS, JSON.stringify(users));
+        enterDashboard(user);
+      }
+      updateDatabaseUI();
+    }
+
+    async function quickLogin(email, password) {
+      const hash = await hashPassword(password);
+      let users = JSON.parse(localStorage.getItem(DB_STORAGE_KEY_USERS) || "[]");
+      const user = users.find(u => u.email === email && u.passwordHash === hash);
+      if (user) {
+        user.lastLogin = new Date().toISOString();
+        user.loginCount = (user.loginCount || 0) + 1;
+        localStorage.setItem(DB_STORAGE_KEY_USERS, JSON.stringify(users));
+        enterDashboard(user);
+      }
+    }
+
+    function enterDashboard(user) {
+      currentUser = user;
+      document.getElementById("auth-view").style.display = "none";
+      document.getElementById("app-view").style.display = "flex";
+      document.getElementById("headerUserAvatar").textContent = user.name.split(" ").map(w => w[0]).join("");
+      document.getElementById("dropUserName").textContent = user.name;
+      document.getElementById("dropUserRole").textContent = user.role;
+    }
+
+    function handleSignOut() {
+      document.getElementById("profileDropdown").classList.remove("show");
+      document.getElementById("app-view").style.display = "none";
+      document.getElementById("auth-view").style.display = "flex";
+    }
+
+    function toggleProfileDropdown() {
+      document.getElementById("profileDropdown").classList.toggle("show");
+    }
+
+    function switchNavSection(section) {
+      document.getElementById("section-monitor").style.display = section === 'monitor' ? 'flex' : 'none';
+      document.getElementById("section-database").style.display = section === 'database' ? 'flex' : 'none';
+      document.getElementById("navMonitor").className = "nav-link-btn " + (section === 'monitor' ? "active" : "");
+      document.getElementById("navDatabase").className = "nav-link-btn " + (section === 'database' ? "active" : "");
+    }
+
+    function exportDatabaseJSON() {
+      const data = localStorage.getItem(DB_STORAGE_KEY_USERS) || "[]";
+      const blob = new Blob([data], { type: "application/json" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "churnguard_users_backup.json";
+      a.click();
+    }
+
+    window.addEventListener("DOMContentLoaded", initDatabase);
+  </script>
+</body>
+</html>
