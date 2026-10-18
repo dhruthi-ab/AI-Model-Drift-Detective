@@ -101,14 +101,49 @@ async function simulate() {
 async function upload(file) {
   if (!file) return; busy('Analysing ' + file.name + '…');
   const fd = new FormData(); fd.append('file', file);
-  try { render(await api('/analyze', { method:'POST', body:fd })); busy('Done.'); }
-  catch (e) { busy('Error: ' + e.message); }
+  try {
+    const r = await api('/analyze', { method:'POST', body:fd });
+    if (r.mode === 'profile') renderProfile(r); else render(r);
+    busy('Done.');
+  } catch (e) { busy('Error: ' + e.message); }
 }
 async function retrain() {
   busy('Retraining…');
   try { const r = await api('/retrain', { method:'POST' });
         busy(`Retrained. New baseline AUC ${r.new_baseline.auc}. Re-run a batch to compare.`); }
   catch (e) { busy('Error: ' + e.message); }
+}
+
+
+function renderProfile(r) {
+  ['banner','kpis','charts'].forEach(i => { if ($(i)) $(i).hidden = true; });
+  R = r;
+  const old = document.getElementById('profile-report');
+  if (old) old.remove();
+
+  const panel = document.createElement('section');
+  panel.id = 'profile-report';
+  panel.style.cssText = 'margin:24px 0;padding:24px;border:1px solid #39445f;border-radius:16px;background:#111827;color:#e5e7eb';
+  const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  panel.innerHTML = `
+    <h2>Dataset Profile</h2>
+    <p>${esc(r.label || 'Uploaded CSV')}</p>
+    <div style="display:flex;gap:24px;flex-wrap:wrap;margin:16px 0">
+      <div><b>${esc(r.rows)}</b><br>Rows</div>
+      <div><b>${esc(r.column_count)}</b><br>Columns</div>
+      <div><b>${esc(r.duplicate_rows)}</b><br>Duplicate rows</div>
+    </div>
+    <p>General dataset analysis completed. Model drift detection requires the supported model features.</p>
+    <div style="overflow-x:auto"><table style="width:100%;text-align:left;border-collapse:collapse">
+      <thead><tr><th style="padding:10px">Column</th><th>Type</th><th>Missing</th><th>Unique</th><th>Summary / Top values</th></tr></thead>
+      <tbody>${(r.columns || []).map(c => `<tr>
+        <td style="padding:10px;border-top:1px solid #39445f">${esc(c.name)}</td>
+        <td>${esc(c.dtype)}</td><td>${esc(c.missing)}</td><td>${esc(c.unique)}</td>
+        <td>${esc(c.summary || (c.top_values ? JSON.stringify(c.top_values) : '—'))}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>`;
+  const anchor = document.getElementById('charts') || document.querySelector('main') || document.body;
+  anchor.parentNode.insertBefore(panel, anchor);
 }
 
 function make(id, cfg) { if (charts[id]) charts[id].destroy(); charts[id] = new Chart($(id), cfg); }

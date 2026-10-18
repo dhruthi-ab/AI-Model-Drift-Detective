@@ -62,7 +62,9 @@ def profile_dataset(df, filename):
         "n_columns": int(len(df.columns)),
         "duplicate_rows": int(df.duplicated().sum()),
         "columns": columns,
-    }from service import DriftService
+    }
+
+from service import DriftService
 
 app = FastAPI(title="AI Model Drift Detective")
 svc = DriftService()
@@ -82,12 +84,46 @@ def simulate(drift: float = 0.0, n: int = 2000, seed: int = 7):
 
 @app.post("/api/analyze")
 async def analyze(file: UploadFile = File(...)):
-    """Analyse an uploaded CSV batch (labels optional)."""
+    """Profile any readable CSV; run drift analysis when model features are present."""
     try:
-        df = pd.read_csv(io.BytesIO(await file.read()))
-        return svc.analyze(df, label=file.filename)
-    except ValueError as e:
-        raise HTTPException(400, str(e))
+        raw = await file.read()
+        if len(raw) > 10 * 1024 * 1024:
+            raise HTTPException(413, "CSV is too large. Maximum size is 10 MB.")
+
+        df = pd.read_csv(io.BytesIO(raw))
+        expected = set(svc.num + svc.cat)
+
+        if expected.issubset(set(df.columns)):
+            return svc.analyze(df, label=file.filename)
+
+        result = profile_dataset(df, file.filename)
+        return {
+            "mode": "profile",
+            "label": result["label"],
+            "rows": result["n_rows"],
+            "column_count": result["n_columns"],
+            "duplicate_rows": result["duplicate_rows"],
+            "columns": [
+                {
+                    "name": c["name"],
+                    "dtype": c["type"],
+                    "missing": c["missing_count"],
+                    "unique": c["unique_count"],
+                    "summary": (
+                        f"mean={c['mean']}, median={c['median']}, "
+                        f"min={c['min']}, max={c['max']}, "
+                        f"outliers={c['outlier_count']}"
+                        if "mean" in c else ""
+                    ),
+                    "top_values": c.get("top_values", []),
+                }
+                for c in result["columns"]
+            ],
+        }
+    except HTTPException:
+        raise
+    except (ValueError, pd.errors.ParserError, UnicodeDecodeError) as e:
+        raise HTTPException(400, f"Could not analyse CSV: {e}")
 
 
 @app.post("/api/retrain")
