@@ -1,0 +1,36 @@
+{
+  "model_name": "CustomerChurn-Classifier-Prod",
+  "model_version": "v2.4.1",
+  "algorithm": "XGBoost-GPU-GradientBoostedTrees",
+  "task": "binary_classification",
+  "target_variable": "churned_within_60d",
+  "endpoint": "https://ml.telecom-ai.corp/v1/predict/churn",
+  "trained_on": "2026-08-15",
+  "deployment_date": "2026-08-20",
+  "baseline_metrics": {
+    "roc_auc": 0.892,
+    "f1_score": 0.814,
+    "precision": 0.835,
+    "recall": 0.794,
+    "brier_score": 0.108,
+    "optimal_threshold": 0.48
+  },
+  "monitoring_thresholds": {
+    "psi_warning": 0.10,
+    "psi_critical": 0.20,
+    "wasserstein_critical": 0.15,
+    "cbpe_auc_drop_warning": 0.05,
+    "cbpe_auc_drop_critical": 0.10,
+    "null_rate_tolerance": 0.01
+  },
+  "ground_truth_latency_days": 60,
+  "top_features": [
+    { "name": "tenure_months", "type": "numerical", "baseline_mean": 32.4, "baseline_std": 24.5, "importance": 0.28 },
+    { "name": "monthly_charges", "type": "numerical", "baseline_mean": 64.76, "baseline_std": 30.09, "importance": 0.22 },
+    { "name": "support_tickets_30d", "type": "numerical", "baseline_mean": 1.25, "baseline_std": 1.45, "importance": 0.19 },
+    { "name": "contract_type", "type": "categorical", "categories": ["Month-to-month", "One year", "Two year"], "importance": 0.14 },
+    { "name": "payment_method", "type": "categorical", "categories": ["Electronic check", "Mailed check", "Bank transfer", "Credit card"], "importance": 0.08 },
+    { "name": "avg_daily_usage_mins", "type": "numerical", "baseline_mean": 142.0, "baseline_std": 58.2, "importance": 0.05 },
+    { "name": "data_usage_gb", "type": "numerical", "baseline_mean": 28.5, "baseline_std": 18.2, "importance": 0.04 }
+  ]
+}
