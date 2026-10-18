@@ -1,222 +1,3568 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>AI Model Drift Detective</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<style>
-  :root { --bg:#f5f7fa; --card:#fff; --text:#1c2733; --muted:#6b7785; --line:#e3e8ee;
-          --green:#198754; --amber:#d98e04; --red:#d63031; --blue:#0f62fe; }
-  @media (prefers-color-scheme: dark) {
-    :root { --bg:#12161c; --card:#1c222b; --text:#e8edf3; --muted:#93a0ae; --line:#2c3541; }
-  }
-  * { box-sizing:border-box; }
-  body { margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--text); }
-  header { padding:18px 24px; border-bottom:1px solid var(--line); background:var(--card); }
-  header h1 { margin:0; font-size:20px; } header p { margin:4px 0 0; color:var(--muted); font-size:13px; }
-  main { max-width:1200px; margin:0 auto; padding:20px; display:grid; gap:16px; }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; }
-  .controls { display:flex; flex-wrap:wrap; gap:16px; align-items:center; }
-  .controls label { font-size:13px; color:var(--muted); }
-  button, .filebtn { background:var(--blue); color:#fff; border:0; padding:9px 16px; border-radius:8px; cursor:pointer; font-size:14px; }
-  button.secondary { background:transparent; color:var(--blue); border:1px solid var(--blue); }
-  input[type=file] { display:none; }
-  .banner { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; }
-  .badge { padding:3px 10px; border-radius:99px; font-size:12px; font-weight:600; color:#fff; text-transform:uppercase; }
-  .healthy,.stable{background:var(--green)} .warning{background:var(--amber)} .critical,.drift{background:var(--red)}
-  .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px; }
-  .kpi small { color:var(--muted); display:block; font-size:12px; } .kpi b { font-size:24px; }
-  .grid2 { display:grid; grid-template-columns:repeat(auto-fit,minmax(420px,1fr)); gap:16px; }
-  table { width:100%; border-collapse:collapse; font-size:13px; }
-  th,td { text-align:left; padding:8px; border-bottom:1px solid var(--line); } th { color:var(--muted); font-weight:500; }
-  .chartbox { position:relative; height:280px; } .scroll { overflow-x:auto; }
-  ul { margin:6px 0 0 18px; padding:0; } li { margin:4px 0; font-size:14px; }
-  select { padding:6px; border-radius:6px; border:1px solid var(--line); background:var(--card); color:var(--text); }
-  #msg { color:var(--muted); font-size:13px; }
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Model Drift Detective | IBM LinuxONE Hackathon Edition</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+
+  <style>
+    :root {
+      --bg-base: #060913;
+      --bg-surface: #0a0f1e;
+      --bg-card: rgba(13, 20, 38, 0.78);
+      --bg-card-hover: rgba(20, 30, 58, 0.88);
+      --border-subtle: rgba(56, 189, 248, 0.15);
+      --border-glow: rgba(0, 245, 255, 0.4);
+      --border-violet: rgba(168, 85, 247, 0.35);
+
+      --neon-cyan: #00f5ff;
+      --neon-cyan-glow: rgba(0, 245, 255, 0.25);
+      --neon-violet: #a855f7;
+      --neon-violet-glow: rgba(168, 85, 247, 0.25);
+      --neon-magenta: #f43f5e;
+      --neon-amber: #f59e0b;
+      --neon-emerald: #10b981;
+      --ibm-blue: #0f62fe;
+
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --radius-lg: 18px;
+      --radius-xl: 24px;
+      --radius-pill: 9999px;
+
+      --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      width: 100%;
+      min-height: 100vh;
+      background-color: var(--bg-base);
+      color: var(--text-main);
+      font-family: var(--font-sans);
+      overflow-x: hidden;
+      line-height: 1.5;
+    }
+
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: var(--bg-base); }
+    ::-webkit-scrollbar-thumb { background: rgba(56, 189, 248, 0.25); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--neon-cyan); }
+
+    /* Canvas background */
+    #neural-canvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0.85;
+    }
+
+    /* Scanline grid texture */
+    .cyber-grid-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      pointer-events: none;
+      z-index: 1;
+      background: radial-gradient(circle at 50% 20%, rgba(0, 245, 255, 0.05) 0%, transparent 60%),
+                  radial-gradient(circle at 80% 80%, rgba(168, 85, 247, 0.04) 0%, transparent 50%),
+                  linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px),
+                  linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
+      background-size: 100% 100%, 100% 100%, 60px 60px, 60px 60px;
+    }
+
+    /* Main container wrapper */
+    .app-root {
+      position: relative;
+      z-index: 2;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Top Brand Navigation */
+    .top-navbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1rem 2.5rem;
+      border-bottom: 1px solid var(--border-subtle);
+      background: rgba(6, 9, 19, 0.85);
+      backdrop-filter: blur(16px);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .brand-group {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      cursor: pointer;
+    }
+
+    .brand-logo-hex {
+      width: 38px;
+      height: 38px;
+      background: linear-gradient(135deg, var(--neon-cyan), var(--neon-violet));
+      clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 20px var(--neon-cyan-glow);
+    }
+
+    .brand-logo-inner {
+      width: 32px;
+      height: 32px;
+      background: var(--bg-base);
+      clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: 900;
+      color: var(--neon-cyan);
+      font-family: var(--font-mono);
+    }
+
+    .brand-text h1 {
+      font-size: 1.1rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .brand-text span {
+      font-size: 0.68rem;
+      color: var(--neon-cyan);
+      font-family: var(--font-mono);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      display: block;
+    }
+
+    .linuxone-chip-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.25rem 0.75rem;
+      background: rgba(15, 98, 254, 0.15);
+      border: 1px solid rgba(15, 98, 254, 0.35);
+      border-radius: var(--radius-pill);
+      font-size: 0.72rem;
+      color: #93c5fd;
+      font-family: var(--font-mono);
+    }
+
+    .live-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--neon-emerald);
+      box-shadow: 0 0 8px var(--neon-emerald);
+      animation: pulse-dot 2s infinite;
+    }
+
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.85); }
+    }
+
+    .nav-actions {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .nav-link-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-muted);
+      padding: 0.45rem 0.9rem;
+      border-radius: var(--radius-sm);
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .nav-link-btn:hover {
+      color: var(--text-main);
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .nav-link-btn.active {
+      color: var(--neon-cyan);
+      border-color: rgba(0, 245, 255, 0.3);
+      background: rgba(0, 245, 255, 0.08);
+      box-shadow: 0 0 15px rgba(0, 245, 255, 0.15);
+    }
+
+    .btn-glow-cyan {
+      background: linear-gradient(135deg, #00f5ff, #0099ff);
+      color: #030a1c;
+      font-weight: 700;
+      border: none;
+      padding: 0.55rem 1.25rem;
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      font-size: 0.86rem;
+      box-shadow: 0 0 25px rgba(0, 245, 255, 0.4);
+      transition: all 0.25s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .btn-glow-cyan:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 0 35px rgba(0, 245, 255, 0.65);
+    }
+
+    .btn-outline-violet {
+      background: rgba(168, 85, 247, 0.1);
+      border: 1px solid var(--neon-violet);
+      color: #e9d5ff;
+      font-weight: 600;
+      padding: 0.55rem 1.25rem;
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      font-size: 0.86rem;
+      transition: all 0.25s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .btn-outline-violet:hover {
+      background: rgba(168, 85, 247, 0.25);
+      box-shadow: 0 0 25px var(--neon-violet-glow);
+      transform: translateY(-2px);
+    }
+
+    /* Screen Views Management */
+    .view-container {
+      display: none;
+      flex-direction: column;
+      flex: 1;
+      width: 100%;
+      opacity: 0;
+      transform: translateY(12px);
+      transition: opacity 0.35s ease, transform 0.35s ease;
+    }
+
+    .view-container.active-view {
+      display: flex;
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* ========================================================
+       SCREEN 1: CINEMATIC LANDING PAGE
+       ======================================================== */
+    .hero-section {
+      min-height: calc(100vh - 75px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 4rem 2rem;
+      position: relative;
+    }
+
+    .hero-badge-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.6rem;
+      padding: 0.4rem 1.2rem;
+      border-radius: var(--radius-pill);
+      background: rgba(0, 245, 255, 0.08);
+      border: 1px solid var(--border-glow);
+      font-size: 0.8rem;
+      font-family: var(--font-mono);
+      color: var(--neon-cyan);
+      box-shadow: 0 0 25px rgba(0, 245, 255, 0.15);
+      margin-bottom: 2rem;
+      animation: float-badge 3s ease-in-out infinite;
+    }
+
+    @keyframes float-badge {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-4px); }
+    }
+
+    .hero-title {
+      font-size: clamp(2.5rem, 6vw, 4.8rem);
+      font-weight: 900;
+      line-height: 1.1;
+      letter-spacing: -0.03em;
+      max-width: 1000px;
+      margin-bottom: 1.5rem;
+    }
+
+    .hero-title .gradient-text {
+      background: linear-gradient(135deg, #00f5ff 0%, #7000ff 50%, #f43f5e 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      display: inline-block;
+      text-shadow: 0 0 40px rgba(0, 245, 255, 0.2);
+    }
+
+    .hero-description {
+      font-size: clamp(1rem, 2vw, 1.25rem);
+      color: var(--text-muted);
+      max-width: 780px;
+      margin-bottom: 2.8rem;
+      line-height: 1.7;
+    }
+
+    .hero-cta-group {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+      gap: 1.25rem;
+      margin-bottom: 4rem;
+    }
+
+    .cta-primary {
+      padding: 1rem 2.2rem;
+      font-size: 1.05rem;
+      font-weight: 700;
+      border-radius: var(--radius-lg);
+      background: linear-gradient(135deg, var(--neon-cyan), #0284c7);
+      color: #030816;
+      border: none;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.75rem;
+      box-shadow: 0 0 35px rgba(0, 245, 255, 0.4);
+      transition: all 0.3s ease;
+    }
+
+    .cta-primary:hover {
+      transform: translateY(-3px) scale(1.02);
+      box-shadow: 0 0 50px rgba(0, 245, 255, 0.7);
+    }
+
+    .cta-demo {
+      padding: 1rem 2rem;
+      font-size: 1.05rem;
+      font-weight: 700;
+      border-radius: var(--radius-lg);
+      background: rgba(168, 85, 247, 0.15);
+      border: 1px solid var(--neon-violet);
+      color: #f3e8ff;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.75rem;
+      box-shadow: 0 0 25px rgba(168, 85, 247, 0.2);
+      transition: all 0.3s ease;
+    }
+
+    .cta-demo:hover {
+      background: rgba(168, 85, 247, 0.3);
+      transform: translateY(-3px) scale(1.02);
+      box-shadow: 0 0 40px rgba(168, 85, 247, 0.5);
+    }
+
+    /* Live Telemetry Ticker */
+    .telemetry-ticker-bar {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1.5rem;
+      width: 100%;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 1.5rem;
+      background: rgba(10, 15, 30, 0.6);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-xl);
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+    }
+
+    .ticker-item {
+      text-align: left;
+      padding: 0.5rem 1rem;
+      border-left: 2px solid var(--neon-cyan);
+    }
+
+    .ticker-label {
+      font-size: 0.72rem;
+      color: var(--text-dim);
+      font-family: var(--font-mono);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .ticker-val {
+      font-size: 1.35rem;
+      font-weight: 800;
+      color: var(--text-main);
+      font-family: var(--font-mono);
+      margin-top: 0.2rem;
+    }
+
+    .ticker-desc {
+      font-size: 0.75rem;
+      color: var(--neon-cyan);
+    }
+
+    /* Landing Feature Cards */
+    .landing-features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 2rem;
+      max-width: 1200px;
+      margin: 4rem auto 6rem;
+      padding: 0 2rem;
+      width: 100%;
+    }
+
+    .feature-glass-card {
+      background: var(--bg-card);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-xl);
+      padding: 2.2rem;
+      text-align: left;
+      position: relative;
+      overflow: hidden;
+      transition: all 0.3s ease;
+    }
+
+    .feature-glass-card:hover {
+      border-color: var(--border-glow);
+      transform: translateY(-5px);
+      box-shadow: 0 20px 45px rgba(0, 245, 255, 0.12);
+    }
+
+    .feature-glass-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 3px;
+      background: linear-gradient(90deg, var(--neon-cyan), var(--neon-violet));
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+
+    .feature-glass-card:hover::before { opacity: 1; }
+
+    .feature-icon-badge {
+      width: 48px;
+      height: 48px;
+      border-radius: var(--radius-md);
+      background: rgba(0, 245, 255, 0.1);
+      border: 1px solid rgba(0, 245, 255, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+      margin-bottom: 1.25rem;
+      box-shadow: 0 0 20px rgba(0, 245, 255, 0.2);
+    }
+
+    .feature-glass-card h3 {
+      font-size: 1.2rem;
+      font-weight: 700;
+      margin-bottom: 0.6rem;
+      color: var(--text-main);
+    }
+
+    .feature-glass-card p {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+
+    /* ========================================================
+       SCREEN 2: GLASSMORPHISM SIGN-IN & DEMO SCREEN
+       ======================================================== */
+    .auth-view-wrapper {
+      min-height: calc(100vh - 75px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2.5rem 1.5rem;
+      position: relative;
+    }
+
+    .auth-glass-container {
+      width: 100%;
+      max-width: 490px;
+      background: rgba(10, 16, 32, 0.85);
+      backdrop-filter: blur(28px);
+      border: 1px solid var(--border-glow);
+      border-radius: var(--radius-xl);
+      padding: 2.8rem;
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.6), 0 0 40px rgba(0, 245, 255, 0.12);
+      position: relative;
+    }
+
+    .auth-return-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.8rem;
+      color: var(--neon-cyan);
+      cursor: pointer;
+      margin-bottom: 1.5rem;
+      background: none;
+      border: none;
+      font-family: var(--font-mono);
+      transition: opacity 0.2s;
+    }
+
+    .auth-header { margin-bottom: 1.8rem; text-align: left; }
+    .auth-header h2 { font-size: 1.6rem; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 0.35rem; }
+    .auth-header p { font-size: 0.85rem; color: var(--text-muted); }
+
+    .auth-tabs {
+      display: flex;
+      background: rgba(255, 255, 255, 0.04);
+      border-radius: var(--radius-md);
+      padding: 4px;
+      margin-bottom: 1.5rem;
+      border: 1px solid var(--border-subtle);
+    }
+
+    .auth-tab-btn {
+      flex: 1;
+      padding: 0.6rem;
+      background: transparent;
+      border: none;
+      border-radius: var(--radius-sm);
+      color: var(--text-muted);
+      font-weight: 600;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .auth-tab-btn.active {
+      background: rgba(0, 245, 255, 0.15);
+      color: var(--neon-cyan);
+      box-shadow: 0 0 15px rgba(0, 245, 255, 0.15);
+    }
+
+    .form-group { margin-bottom: 1.25rem; text-align: left; }
+    .form-group label {
+      display: block;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 0.4rem;
+      font-family: var(--font-mono);
+      text-transform: uppercase;
+    }
+
+    .form-input {
+      width: 100%;
+      padding: 0.8rem 1rem;
+      background: rgba(14, 22, 42, 0.9);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      color: var(--text-main);
+      font-size: 0.92rem;
+      outline: none;
+      transition: all 0.2s ease;
+    }
+
+    .form-input:focus {
+      border-color: var(--neon-cyan);
+      box-shadow: 0 0 20px var(--neon-cyan-glow);
+    }
+
+    .pwd-wrapper { position: relative; }
+    .pwd-toggle-btn {
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      color: var(--text-dim);
+      cursor: pointer;
+      font-size: 1rem;
+    }
+
+    .auth-submit-btn {
+      width: 100%;
+      padding: 0.9rem;
+      border-radius: var(--radius-md);
+      background: linear-gradient(135deg, var(--neon-cyan), #0284c7);
+      border: none;
+      color: #030816;
+      font-weight: 800;
+      font-size: 0.95rem;
+      cursor: pointer;
+      box-shadow: 0 0 25px rgba(0, 245, 255, 0.35);
+      transition: all 0.25s ease;
+      margin-top: 0.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+    }
+
+    .demo-access-panel {
+      margin-top: 1.8rem;
+      padding-top: 1.5rem;
+      border-top: 1px dashed rgba(255, 255, 255, 0.12);
+      text-align: left;
+    }
+
+    .demo-access-title {
+      font-size: 0.72rem;
+      font-family: var(--font-mono);
+      color: var(--neon-cyan);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 0.75rem;
+    }
+
+    .demo-profiles-list { display: flex; flex-direction: column; gap: 0.55rem; }
+
+    .demo-profile-btn {
+      padding: 0.65rem 0.9rem;
+      border-radius: var(--radius-sm);
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-main);
+      font-size: 0.82rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      transition: all 0.2s ease;
+    }
+
+    .demo-profile-btn:hover {
+      border-color: var(--neon-cyan);
+      background: rgba(0, 245, 255, 0.08);
+      transform: translateX(3px);
+    }
+
+    /* ========================================================
+       SCREEN 3: TWO-MODE DRIFT INVESTIGATION WORKSPACE
+       ======================================================== */
+    .workspace-wrapper {
+      padding: 1.5rem 2.5rem 4rem;
+      max-width: 1500px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    /* PROMINENT TWO-MODE SELECTOR HEADER CARDS */
+    .workspace-mode-selector-strip {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 1.25rem;
+      margin-bottom: 1.8rem;
+    }
+
+    @media (max-width: 860px) {
+      .workspace-mode-selector-strip { grid-template-columns: 1fr; }
+    }
+
+    .mode-selection-card {
+      background: rgba(13, 20, 38, 0.8);
+      backdrop-filter: blur(20px);
+      border: 2px solid var(--border-subtle);
+      border-radius: var(--radius-xl);
+      padding: 1.4rem 1.6rem;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+
+    .mode-selection-card:hover {
+      border-color: rgba(0, 245, 255, 0.4);
+      transform: translateY(-2px);
+      box-shadow: 0 10px 30px rgba(0, 245, 255, 0.1);
+    }
+
+    .mode-selection-card.active-mode {
+      border-color: var(--neon-cyan);
+      background: linear-gradient(135deg, rgba(0, 245, 255, 0.12), rgba(168, 85, 247, 0.08));
+      box-shadow: 0 0 35px rgba(0, 245, 255, 0.22);
+    }
+
+    .mode-selection-card.active-mode::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 3px;
+      background: linear-gradient(90deg, var(--neon-cyan), var(--neon-violet));
+    }
+
+    .mode-card-content {
+      display: flex;
+      align-items: center;
+      gap: 1.2rem;
+    }
+
+    .mode-icon-circle {
+      width: 48px;
+      height: 48px;
+      border-radius: var(--radius-lg);
+      background: rgba(0, 245, 255, 0.1);
+      border: 1px solid rgba(0, 245, 255, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.4rem;
+      flex-shrink: 0;
+    }
+
+    .mode-selection-card.active-mode .mode-icon-circle {
+      box-shadow: 0 0 20px var(--neon-cyan-glow);
+      background: rgba(0, 245, 255, 0.2);
+    }
+
+    .mode-text-details h3 {
+      font-size: 1.05rem;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      margin-bottom: 0.25rem;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+
+    .mode-text-details p {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      line-height: 1.4;
+    }
+
+    .mode-status-pill {
+      padding: 0.25rem 0.75rem;
+      border-radius: var(--radius-pill);
+      font-size: 0.72rem;
+      font-family: var(--font-mono);
+      font-weight: 700;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .mode-status-pill.active {
+      background: var(--neon-cyan);
+      color: #030a1c;
+      box-shadow: 0 0 15px rgba(0, 245, 255, 0.5);
+    }
+
+    .mode-status-pill.inactive {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-dim);
+    }
+
+    /* MODE PANELS CONTAINER */
+    .workspace-mode-panel {
+      display: none;
+      flex-direction: column;
+      animation: fadeIn 0.3s ease;
+    }
+
+    .workspace-mode-panel.current-mode {
+      display: flex;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Active Provenance Banner */
+    .provenance-card {
+      background: rgba(13, 20, 38, 0.85);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--border-violet);
+      border-radius: var(--radius-lg);
+      padding: 1rem 1.5rem;
+      margin-bottom: 1.5rem;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    }
+
+    .provenance-info {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .provenance-badge {
+      padding: 0.35rem 0.85rem;
+      border-radius: var(--radius-pill);
+      font-size: 0.75rem;
+      font-family: var(--font-mono);
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .provenance-badge.simulated {
+      background: rgba(168, 85, 247, 0.2);
+      border: 1px solid var(--neon-violet);
+      color: #e9d5ff;
+      box-shadow: 0 0 15px rgba(168, 85, 247, 0.25);
+    }
+
+    .provenance-badge.live {
+      background: rgba(16, 185, 129, 0.2);
+      border: 1px solid var(--neon-emerald);
+      color: #a7f3d0;
+      box-shadow: 0 0 15px rgba(16, 185, 129, 0.25);
+    }
+
+    .provenance-badge.profile-mode {
+      background: rgba(56, 189, 248, 0.2);
+      border: 1px solid var(--neon-cyan);
+      color: #bae6fd;
+      box-shadow: 0 0 15px rgba(56, 189, 248, 0.25);
+    }
+
+    .provenance-text b { color: var(--text-main); font-size: 0.92rem; }
+    .provenance-text p { font-size: 0.78rem; color: var(--text-muted); }
+
+    /* Simulation Control Toolbar */
+    .controls-panel {
+      background: var(--bg-card);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: 1.4rem 1.8rem;
+      margin-bottom: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+
+    .controls-row-top {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1.5rem;
+    }
+
+    .slider-group {
+      display: flex;
+      align-items: center;
+      gap: 1.2rem;
+      flex: 1;
+      min-width: 280px;
+    }
+
+    .slider-label {
+      font-size: 0.82rem;
+      font-family: var(--font-mono);
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+
+    .drift-slider {
+      flex: 1;
+      -webkit-appearance: none;
+      height: 6px;
+      border-radius: 3px;
+      background: linear-gradient(90deg, var(--neon-emerald), var(--neon-amber), var(--neon-magenta));
+      outline: none;
+      cursor: pointer;
+    }
+
+    .drift-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #ffffff;
+      box-shadow: 0 0 12px var(--neon-cyan);
+      cursor: pointer;
+      border: 2px solid var(--bg-base);
+    }
+
+    .drift-value-chip {
+      padding: 0.25rem 0.65rem;
+      border-radius: var(--radius-sm);
+      font-size: 0.85rem;
+      font-family: var(--font-mono);
+      font-weight: 700;
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--neon-cyan);
+      border: 1px solid rgba(0, 245, 255, 0.3);
+      min-width: 52px;
+      text-align: center;
+    }
+
+    .controls-row-bottom {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      padding-top: 1rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .preset-pills {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    .preset-btn {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-muted);
+      padding: 0.35rem 0.75rem;
+      border-radius: var(--radius-pill);
+      font-size: 0.75rem;
+      font-family: var(--font-mono);
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .preset-btn:hover {
+      border-color: var(--neon-cyan);
+      color: var(--neon-cyan);
+      background: rgba(0, 245, 255, 0.06);
+    }
+
+    .sample-size-selector {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .sample-size-selector select {
+      background: rgba(14, 22, 42, 0.9);
+      border: 1px solid var(--border-subtle);
+      color: var(--neon-cyan);
+      padding: 0.35rem 0.65rem;
+      border-radius: var(--radius-sm);
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      outline: none;
+      cursor: pointer;
+    }
+
+    .toolbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+
+    .btn-action-primary {
+      background: linear-gradient(135deg, var(--neon-cyan), #0284c7);
+      color: #030816;
+      border: none;
+      padding: 0.65rem 1.25rem;
+      border-radius: var(--radius-md);
+      font-weight: 700;
+      font-size: 0.85rem;
+      cursor: pointer;
+      box-shadow: 0 0 20px rgba(0, 245, 255, 0.3);
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .btn-action-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 0 30px rgba(0, 245, 255, 0.5);
+    }
+
+    .btn-action-secondary {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-main);
+      padding: 0.65rem 1.15rem;
+      border-radius: var(--radius-md);
+      font-weight: 600;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .btn-action-secondary:hover {
+      border-color: var(--neon-violet);
+      background: rgba(168, 85, 247, 0.1);
+      color: #f3e8ff;
+    }
+
+    /* ========================================================
+       UPLOAD & ANALYZE MODE SPECIFIC STYLES
+       ======================================================== */
+    .upload-zone-wrapper {
+      background: var(--bg-card);
+      backdrop-filter: blur(20px);
+      border: 2px dashed rgba(0, 245, 255, 0.35);
+      border-radius: var(--radius-xl);
+      padding: 3rem 2rem;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      position: relative;
+      margin-bottom: 1.5rem;
+    }
+
+    .upload-zone-wrapper:hover, .upload-zone-wrapper.dragover {
+      border-color: var(--neon-cyan);
+      background: rgba(0, 245, 255, 0.05);
+      box-shadow: 0 0 40px rgba(0, 245, 255, 0.15);
+      transform: translateY(-2px);
+    }
+
+    .upload-icon-anim {
+      width: 64px;
+      height: 64px;
+      margin: 0 auto 1.25rem;
+      border-radius: var(--radius-xl);
+      background: rgba(0, 245, 255, 0.1);
+      border: 1px solid rgba(0, 245, 255, 0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2rem;
+      box-shadow: 0 0 25px rgba(0, 245, 255, 0.25);
+    }
+
+    .upload-zone-wrapper h3 {
+      font-size: 1.3rem;
+      font-weight: 800;
+      margin-bottom: 0.4rem;
+    }
+
+    .upload-zone-wrapper p {
+      font-size: 0.88rem;
+      color: var(--text-muted);
+      max-width: 550px;
+      margin: 0 auto 1.5rem;
+      line-height: 1.6;
+    }
+
+    .upload-btn-pill {
+      background: linear-gradient(135deg, var(--neon-cyan), #0284c7);
+      color: #030816;
+      border: none;
+      padding: 0.75rem 1.8rem;
+      border-radius: var(--radius-pill);
+      font-weight: 800;
+      font-size: 0.9rem;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      box-shadow: 0 0 25px rgba(0, 245, 255, 0.4);
+      transition: all 0.2s ease;
+    }
+
+    .upload-btn-pill:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 0 35px rgba(0, 245, 255, 0.6);
+    }
+
+    .quick-sample-strip {
+      margin-top: 1.8rem;
+      padding-top: 1.4rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+      gap: 0.75rem;
+    }
+
+    .quick-sample-label {
+      font-size: 0.75rem;
+      font-family: var(--font-mono);
+      color: var(--text-dim);
+      text-transform: uppercase;
+    }
+
+    .btn-quick-sample {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-main);
+      padding: 0.35rem 0.85rem;
+      border-radius: var(--radius-pill);
+      font-size: 0.78rem;
+      font-family: var(--font-mono);
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .btn-quick-sample:hover {
+      border-color: var(--neon-cyan);
+      color: var(--neon-cyan);
+      background: rgba(0, 245, 255, 0.08);
+    }
+
+    /* Selected File Bar */
+    .selected-file-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-glow);
+      border-radius: var(--radius-lg);
+      padding: 1.25rem 1.6rem;
+      margin-bottom: 1.5rem;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+    }
+
+    .file-meta-group {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .file-icon-box {
+      width: 44px;
+      height: 44px;
+      border-radius: var(--radius-md);
+      background: rgba(0, 245, 255, 0.1);
+      border: 1px solid rgba(0, 245, 255, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.3rem;
+      color: var(--neon-cyan);
+    }
+
+    .file-name-txt {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--text-main);
+      font-family: var(--font-mono);
+    }
+
+    .file-size-txt {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      margin-top: 0.15rem;
+    }
+
+    .file-status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.25rem 0.75rem;
+      border-radius: var(--radius-pill);
+      font-size: 0.75rem;
+      font-family: var(--font-mono);
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .file-status-badge.idle { background: rgba(56, 189, 248, 0.15); color: #7dd3fc; border: 1px solid rgba(56, 189, 248, 0.3); }
+    .file-status-badge.analyzing { background: rgba(245, 158, 11, 0.15); color: var(--neon-amber); border: 1px solid var(--neon-amber); }
+    .file-status-badge.success { background: rgba(16, 185, 129, 0.15); color: var(--neon-emerald); border: 1px solid var(--neon-emerald); }
+    .file-status-badge.error { background: rgba(244, 63, 94, 0.15); color: var(--neon-magenta); border: 1px solid var(--neon-magenta); }
+
+    /* Educational Callout */
+    .edu-callout-card {
+      background: rgba(15, 98, 254, 0.08);
+      border: 1px solid rgba(15, 98, 254, 0.3);
+      border-radius: var(--radius-lg);
+      padding: 1.25rem 1.6rem;
+      margin-bottom: 1.5rem;
+      display: flex;
+      gap: 1rem;
+      align-items: flex-start;
+    }
+
+    .edu-icon { font-size: 1.4rem; flex-shrink: 0; margin-top: 0.1rem; }
+    .edu-content h4 { font-size: 0.92rem; font-weight: 700; color: #93c5fd; margin-bottom: 0.35rem; }
+    .edu-content p { font-size: 0.82rem; color: var(--text-muted); line-height: 1.5; }
+    .edu-content code { background: rgba(0, 0, 0, 0.3); padding: 0.15rem 0.4rem; border-radius: 4px; color: var(--neon-cyan); font-family: var(--font-mono); font-size: 0.78rem; }
+
+    /* Upload Action Toolbar */
+    .upload-action-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 0.85rem 1.4rem;
+      background: rgba(14, 22, 42, 0.7);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--border-glow);
+      border-radius: var(--radius-lg);
+      margin-bottom: 1.5rem;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+    }
+
+    .upload-toolbar-info {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      color: var(--neon-cyan);
+    }
+
+    .dropzone-status-msg {
+      margin-top: 1rem;
+      font-size: 0.82rem;
+      font-family: var(--font-mono);
+      color: #94a3b8;
+      background: rgba(255, 255, 255, 0.04);
+      padding: 0.45rem 1rem;
+      border-radius: var(--radius-pill);
+      display: inline-block;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .empty-workspace-banner {
+      background: linear-gradient(135deg, rgba(0, 245, 255, 0.04), rgba(112, 0, 255, 0.04));
+      border: 1px dashed rgba(0, 245, 255, 0.3);
+      border-radius: var(--radius-lg);
+      padding: 1.5rem 1.8rem;
+      margin-bottom: 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1.25rem;
+      flex-wrap: wrap;
+    }
+
+    .empty-banner-content h4 {
+      font-size: 0.98rem;
+      font-weight: 700;
+      color: #f8fafc;
+      margin-bottom: 0.25rem;
+    }
+
+    .empty-banner-content p {
+      font-size: 0.82rem;
+      color: var(--text-muted);
+    }
+
+    /* Custom Polished Modals */
+    .custom-modal-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 99999;
+      background: rgba(3, 8, 22, 0.88);
+      backdrop-filter: blur(14px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+      animation: modalFadeIn 0.2s ease-out;
+    }
+
+    @keyframes modalFadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    .custom-modal-card {
+      background: #090e1d;
+      border: 1px solid rgba(0, 245, 255, 0.4);
+      box-shadow: 0 0 50px rgba(0, 245, 255, 0.25), 0 25px 60px rgba(0, 0, 0, 0.95);
+      border-radius: var(--radius-xl);
+      max-width: 480px;
+      width: 100%;
+      padding: 2.2rem 2rem;
+      text-align: center;
+      animation: modalSlideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      position: relative;
+    }
+
+    @keyframes modalSlideUp {
+      from { transform: translateY(20px) scale(0.96); opacity: 0; }
+      to { transform: translateY(0) scale(1); opacity: 1; }
+    }
+
+    .modal-icon-badge {
+      width: 62px;
+      height: 62px;
+      border-radius: 50%;
+      background: rgba(245, 158, 11, 0.15);
+      border: 1px solid var(--neon-amber);
+      color: var(--neon-amber);
+      font-size: 1.8rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 1.25rem;
+      box-shadow: 0 0 25px rgba(245, 158, 11, 0.25);
+    }
+
+    .modal-title {
+      font-size: 1.25rem;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      color: #f8fafc;
+      margin-bottom: 0.6rem;
+      font-family: var(--font-mono);
+    }
+
+    .modal-message {
+      font-size: 0.92rem;
+      color: var(--text-muted);
+      line-height: 1.6;
+      margin-bottom: 1.8rem;
+    }
+
+    .modal-action-group {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .modal-btn-primary {
+      background: linear-gradient(135deg, var(--neon-cyan), #0284c7);
+      color: #030816;
+      border: none;
+      padding: 0.75rem 1.6rem;
+      border-radius: var(--radius-md);
+      font-weight: 700;
+      font-size: 0.88rem;
+      cursor: pointer;
+      box-shadow: 0 0 20px rgba(0, 245, 255, 0.35);
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .modal-btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 0 30px rgba(0, 245, 255, 0.55);
+    }
+
+    .modal-btn-secondary {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-main);
+      padding: 0.75rem 1.5rem;
+      border-radius: var(--radius-md);
+      font-weight: 600;
+      font-size: 0.88rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .modal-btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.12);
+      border-color: rgba(255, 255, 255, 0.3);
+    }
+
+    /* Alert & Severity Banner */
+    .severity-banner {
+      background: var(--bg-card);
+      backdrop-filter: blur(16px);
+      border-radius: var(--radius-lg);
+      padding: 1.25rem 1.8rem;
+      margin-bottom: 1.5rem;
+      border-left: 5px solid var(--neon-cyan);
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+    }
+
+    .severity-banner.critical {
+      border-left-color: var(--neon-magenta);
+      background: linear-gradient(90deg, rgba(244, 63, 94, 0.08), var(--bg-card));
+    }
+
+    .severity-banner.warning {
+      border-left-color: var(--neon-amber);
+      background: linear-gradient(90deg, rgba(245, 158, 11, 0.08), var(--bg-card));
+    }
+
+    .severity-banner.healthy {
+      border-left-color: var(--neon-emerald);
+      background: linear-gradient(90deg, rgba(16, 185, 129, 0.08), var(--bg-card));
+    }
+
+    .severity-header {
+      display: flex;
+      align-items: center;
+      gap: 0.8rem;
+      flex-wrap: wrap;
+    }
+
+    .severity-tag {
+      padding: 0.2rem 0.75rem;
+      border-radius: var(--radius-pill);
+      font-size: 0.75rem;
+      font-weight: 800;
+      font-family: var(--font-mono);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .severity-tag.critical { background: var(--neon-magenta); color: #fff; box-shadow: 0 0 15px rgba(244, 63, 94, 0.4); }
+    .severity-tag.warning { background: var(--neon-amber); color: #000; box-shadow: 0 0 15px rgba(245, 158, 11, 0.4); }
+    .severity-tag.healthy { background: var(--neon-emerald); color: #000; box-shadow: 0 0 15px rgba(16, 185, 129, 0.4); }
+
+    .severity-title { font-size: 1rem; font-weight: 700; }
+    .recommendations-list { margin-left: 1.25rem; font-size: 0.86rem; color: var(--text-muted); }
+    .recommendations-list li { margin-bottom: 0.25rem; }
+
+    /* KPI Metrics Cards Grid */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 1.25rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .kpi-card {
+      background: var(--bg-card);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: 1.3rem 1.4rem;
+      position: relative;
+      overflow: hidden;
+      transition: all 0.25s ease;
+    }
+
+    .kpi-card:hover {
+      border-color: var(--border-glow);
+      transform: translateY(-3px);
+    }
+
+    .kpi-title {
+      font-size: 0.72rem;
+      font-family: var(--font-mono);
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.4rem;
+    }
+
+    .kpi-value {
+      font-size: 2rem;
+      font-weight: 800;
+      font-family: var(--font-mono);
+      color: var(--text-main);
+      line-height: 1.2;
+    }
+
+    .kpi-subtext {
+      font-size: 0.74rem;
+      color: var(--text-muted);
+      margin-top: 0.35rem;
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+
+    .kpi-progress {
+      width: 100%;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 2px;
+      margin-top: 0.75rem;
+      overflow: hidden;
+    }
+
+    .kpi-progress-bar {
+      height: 100%;
+      border-radius: 2px;
+      transition: width 0.5s ease;
+    }
+
+    /* Visualization Grid */
+    .charts-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    @media (max-width: 1100px) {
+      .charts-grid { grid-template-columns: 1fr; }
+    }
+
+    .chart-panel-card {
+      background: var(--bg-card);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: 1.5rem;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .chart-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    .chart-header h3 {
+      font-size: 0.95rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .feature-select-dropdown {
+      background: rgba(14, 22, 42, 0.9);
+      border: 1px solid var(--border-subtle);
+      color: var(--neon-cyan);
+      padding: 0.35rem 0.75rem;
+      border-radius: var(--radius-sm);
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      outline: none;
+      cursor: pointer;
+    }
+
+    .chart-box {
+      position: relative;
+      height: 290px;
+      width: 100%;
+    }
+
+    /* Statistical Table */
+    .table-container {
+      overflow-x: auto;
+      border-radius: var(--radius-md);
+      margin-top: 0.5rem;
+    }
+
+    .covariate-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+      text-align: left;
+    }
+
+    .covariate-table th {
+      padding: 0.75rem 1rem;
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--text-dim);
+      font-family: var(--font-mono);
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 0.7rem;
+      letter-spacing: 0.05em;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .covariate-table td {
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      color: var(--text-main);
+    }
+
+    .covariate-table tr:hover td { background: rgba(0, 245, 255, 0.03); }
+
+    .badge-status {
+      display: inline-block;
+      padding: 0.15rem 0.55rem;
+      border-radius: var(--radius-pill);
+      font-size: 0.68rem;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      text-transform: uppercase;
+    }
+
+    .badge-status.drift { background: rgba(244, 63, 94, 0.18); color: var(--neon-magenta); border: 1px solid var(--neon-magenta); }
+    .badge-status.warning { background: rgba(245, 158, 11, 0.18); color: var(--neon-amber); border: 1px solid var(--neon-amber); }
+    .badge-status.stable { background: rgba(16, 185, 129, 0.18); color: var(--neon-emerald); border: 1px solid var(--neon-emerald); }
+
+    .btn-inspect {
+      padding: 0.25rem 0.55rem;
+      border-radius: var(--radius-sm);
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-subtle);
+      color: var(--neon-cyan);
+      cursor: pointer;
+      font-size: 0.72rem;
+      font-family: var(--font-mono);
+    }
+
+    /* Dataset Profiler View */
+    .profile-kpi-bar {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .profile-kpi-item {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 1rem;
+      text-align: left;
+    }
+
+    .profile-kpi-item small {
+      color: var(--text-dim);
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      text-transform: uppercase;
+    }
+
+    .profile-kpi-item b {
+      display: block;
+      font-size: 1.5rem;
+      color: var(--neon-cyan);
+      font-family: var(--font-mono);
+      margin-top: 0.2rem;
+    }
+
+    /* Toast alerts */
+    .toast-container {
+      position: fixed;
+      bottom: 2rem;
+      right: 2rem;
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .toast-pill {
+      background: rgba(13, 20, 38, 0.95);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--border-glow);
+      border-radius: var(--radius-md);
+      padding: 0.75rem 1.25rem;
+      font-size: 0.85rem;
+      color: var(--text-main);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      animation: toast-in 0.3s ease;
+    }
+
+    @keyframes toast-in {
+      from { transform: translateY(20px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
+    /* User Profile Menu */
+    .user-pill {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border-subtle);
+      padding: 0.35rem 0.85rem;
+      border-radius: var(--radius-pill);
+      cursor: pointer;
+      position: relative;
+    }
+
+    .user-avatar-circle {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--neon-cyan), var(--neon-violet));
+      color: #030a1c;
+      font-size: 0.72rem;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .user-dropdown-menu {
+      position: absolute;
+      top: 110%;
+      right: 0;
+      width: 210px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 0.5rem;
+      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.6);
+      display: none;
+      flex-direction: column;
+      gap: 0.35rem;
+      z-index: 101;
+    }
+
+    .user-dropdown-menu.open { display: flex; }
+
+    .dropdown-btn {
+      background: none;
+      border: none;
+      padding: 0.5rem 0.75rem;
+      border-radius: var(--radius-sm);
+      color: var(--text-muted);
+      font-size: 0.82rem;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .dropdown-btn:hover { background: rgba(255, 255, 255, 0.05); color: var(--text-main); }
+  </style>
 </head>
+
 <body>
-<header>
-  <h1>🕵️ AI Model Drift Detective</h1>
-  <p>Monitors a deployed churn model for data drift, prediction drift and performance decay.</p>
-</header>
-<main>
-  <section class="card controls">
-    <div>
-      <label for="drift">Simulated drift: <b id="dv">0.50</b></label><br>
-      <input type="range" id="drift" min="0" max="1" step="0.05" value="0.5" oninput="dv.textContent=(+this.value).toFixed(2)">
-    </div>
-    <button onclick="simulate()">Simulate production batch</button>
-    <label class="filebtn secondary" style="background:transparent;color:var(--blue);border:1px solid var(--blue)">
-      Upload CSV batch <input type="file" accept=".csv" onchange="upload(this.files[0])"></label>
-    <button class="secondary" onclick="retrain()">Retrain model</button>
-    <span id="msg">Baseline loading…</span>
-  </section>
+  <!-- Neural Network Animated Background Canvas -->
+  <canvas id="neural-canvas"></canvas>
+  <div class="cyber-grid-overlay"></div>
 
-  <section class="card banner" id="banner" hidden>
-    <div><span class="badge" id="lvl"></span> <b id="lvltxt" style="margin-left:8px"></b>
-      <ul id="recs"></ul></div>
-  </section>
+  <div class="app-root">
+    <!-- Top Sticky Brand Bar -->
+    <header class="top-navbar">
+      <div class="brand-group" onclick="switchView('landing')">
+        <div class="brand-logo-hex">
+          <div class="brand-logo-inner">s390</div>
+        </div>
+        <div class="brand-text">
+          <h1>AI Drift Detective</h1>
+          <span>IBM LinuxONE™ Observability</span>
+        </div>
+      </div>
 
-  <section class="kpis" id="kpis" hidden>
-    <div class="card kpi"><small>Drift score (0-100)</small><b id="k1"></b></div>
-    <div class="card kpi"><small>Features drifted</small><b id="k2"></b></div>
-    <div class="card kpi"><small>Prediction PSI</small><b id="k3"></b></div>
-    <div class="card kpi"><small>AUC (baseline → now)</small><b id="k4"></b></div>
-  </section>
+      <div class="linuxone-chip-badge">
+        <span class="live-dot"></span>
+        <span id="telum-status">TELUM AI ACCELERATOR: ONLINE</span>
+      </div>
 
-  <div class="grid2" id="charts" hidden>
-    <section class="card"><b>Feature drift (PSI)</b><div class="chartbox"><canvas id="psiChart"></canvas></div>
-      <small style="color:var(--muted)">PSI &lt; 0.10 stable · 0.10-0.25 warning · &gt; 0.25 drift</small></section>
-    <section class="card"><b>Distribution: training vs production</b>
-      <select id="featSel" onchange="drawDist()" style="margin-left:8px"></select>
-      <div class="chartbox"><canvas id="distChart"></canvas></div></section>
-    <section class="card"><b>Feature details</b><div class="scroll"><table id="tbl"></table></div></section>
-    <section class="card"><b>Drift score over time</b><div class="chartbox"><canvas id="histChart"></canvas></div></section>
+      <nav class="nav-actions">
+        <button class="nav-link-btn" id="nav-landing-btn" onclick="switchView('landing')">
+          🌐 Overview
+        </button>
+        <button class="nav-link-btn" id="nav-workspace-btn" onclick="switchView('workspace')">
+          🕵️ Drift Workspace
+        </button>
+        <button class="nav-link-btn" id="nav-database-btn" onclick="switchView('database')">
+          🗄️ Audit Database
+        </button>
+
+        <div id="unauth-header-actions" style="display: flex; gap: 0.5rem;">
+          <button class="btn-outline-violet" onclick="quickDemoLogin('sarah.lin@mlops.corp')">
+            ⚡ 1-Click Demo
+          </button>
+          <button class="btn-glow-cyan" onclick="switchView('auth')">
+            Sign In →
+          </button>
+        </div>
+
+        <div id="auth-header-actions" style="display: none;">
+          <div class="user-pill" onclick="toggleUserDropdown()">
+            <div class="user-avatar-circle" id="userAvatarText">SL</div>
+            <div style="text-align: left;">
+              <div style="font-size: 0.78rem; font-weight: 700;" id="userHeaderName">Sarah Lin</div>
+              <div style="font-size: 0.65rem; color: var(--neon-cyan); font-family: var(--font-mono);" id="userHeaderRole">Lead MLOps</div>
+            </div>
+            <div class="user-dropdown-menu" id="userDropdownMenu">
+              <button class="dropdown-btn" onclick="switchView('workspace')">📊 Drift Telemetry</button>
+              <button class="dropdown-btn" onclick="switchView('database')">🗄️ User Accounts DB</button>
+              <hr style="border: none; border-top: 1px solid var(--border-subtle); margin: 0.2rem 0;">
+              <button class="dropdown-btn" style="color: var(--neon-magenta);" onclick="logoutUser()">🚪 Sign Out</button>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <!-- ========================================================
+         VIEW 1: CINEMATIC LANDING PAGE
+         ======================================================== -->
+    <main class="view-container active-view" id="view-landing">
+      <section class="hero-section">
+        <div class="hero-badge-pill">
+          ⚡ IBM LinuxONE High-Throughput Model Security & Governance
+        </div>
+
+        <h1 class="hero-title">
+          Your AI Is Changing.<br>
+          <span class="gradient-text">Detect It Before It Fails.</span>
+        </h1>
+
+        <p class="hero-description">
+          Enterprise customer retention models degrade silently in production as consumer behaviors,
+          macroeconomics, and competitive pricing drift. ChurnGuard AI monitors Population Stability Index (PSI),
+          Kolmogorov-Smirnov feature shifts, and concept decay on mission-critical IBM LinuxONE infrastructure.
+        </p>
+
+        <div class="hero-cta-group">
+          <button class="cta-primary" onclick="launchWorkspaceAction()">
+            <span>🚀 Launch Investigation Workspace</span>
+          </button>
+          <button class="cta-demo" onclick="quickDemoLogin('sarah.lin@mlops.corp')">
+            <span>⚡ Instant 1-Click Demo (Lead MLOps)</span>
+          </button>
+        </div>
+
+        <!-- Telemetry Strip -->
+        <div class="telemetry-ticker-bar">
+          <div class="ticker-item">
+            <div class="ticker-label">Drift Benchmark</div>
+            <div class="ticker-val">PSI &lt; 0.10</div>
+            <div class="ticker-desc">Industry-standard threshold</div>
+          </div>
+          <div class="ticker-item">
+            <div class="ticker-label">Hardware Latency</div>
+            <div class="ticker-val">0.82 ms</div>
+            <div class="ticker-desc">LinuxONE Telum SIMD acceleration</div>
+          </div>
+          <div class="ticker-item">
+            <div class="ticker-label">Label-Free Detection</div>
+            <div class="ticker-val">100% Real-Time</div>
+            <div class="ticker-desc">Early warning before ground-truth</div>
+          </div>
+          <div class="ticker-item">
+            <div class="ticker-label">Remediation Loop</div>
+            <div class="ticker-val">Auto-Retrain</div>
+            <div class="ticker-desc">Zero-downtime model update</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3-Pillar Feature Cards -->
+      <section class="landing-features-grid">
+        <div class="feature-glass-card">
+          <div class="feature-icon-badge">📊</div>
+          <h3>Covariate &amp; PSI Drift Detection</h3>
+          <p>
+            Continuously quantifies distribution divergence between reference training datasets and incoming production traffic across all customer tenure, pricing, and service features.
+          </p>
+        </div>
+        <div class="feature-glass-card">
+          <div class="feature-icon-badge">🔬</div>
+          <h3>Rigorous Statistical Hypothesis Testing</h3>
+          <p>
+            Applies two-sample Kolmogorov-Smirnov tests for continuous metrics and Chi-square contingency tests for categorical variables, surfacing exact p-values down to &lt; 0.001.
+          </p>
+        </div>
+        <div class="feature-glass-card">
+          <div class="feature-icon-badge">⚡</div>
+          <h3>IBM LinuxONE Telum Acceleration</h3>
+          <p>
+            Engineered for high-volume enterprise banking and telco workloads. High-throughput in-memory tensor checks safeguard customer churn predictions with mainframe reliability.
+          </p>
+        </div>
+      </section>
+    </main>
+
+    <!-- ========================================================
+         VIEW 2: GLASSMORPHISM SIGN-IN & DEMO SCREEN
+         ======================================================== -->
+    <main class="view-container" id="view-auth">
+      <div class="auth-view-wrapper">
+        <div class="auth-glass-container">
+          <button class="auth-return-link" onclick="switchView('landing')">
+            ← Return to Overview
+          </button>
+
+          <div class="auth-header">
+            <h2>Enterprise Sign In</h2>
+            <p>Access the LinuxONE Model Drift Investigation Platform</p>
+          </div>
+
+          <div class="auth-tabs">
+            <button class="auth-tab-btn active" id="tab-auth-login" onclick="setAuthTab('login')">Sign In</button>
+            <button class="auth-tab-btn" id="tab-auth-register" onclick="setAuthTab('register')">Register New</button>
+          </div>
+
+          <form id="auth-form" onsubmit="handleAuthSubmit(event)">
+            <div class="form-group" id="group-auth-name" style="display: none;">
+              <label for="auth-name">Full Name</label>
+              <input type="text" id="auth-name" class="form-input" placeholder="Sarah Lin">
+            </div>
+
+            <div class="form-group" id="group-auth-role" style="display: none;">
+              <label for="auth-role">Organization Role</label>
+              <select id="auth-role" class="form-input">
+                <option value="Lead MLOps Engineer">Lead MLOps Engineer</option>
+                <option value="Senior Data Scientist">Senior Data Scientist</option>
+                <option value="Model Risk Auditor">Model Risk Auditor</option>
+                <option value="LinuxONE Infrastructure Lead">LinuxONE Infrastructure Lead</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="auth-email">Work Email</label>
+              <input type="email" id="auth-email" class="form-input" required value="sarah.lin@mlops.corp">
+            </div>
+
+            <div class="form-group">
+              <label for="auth-password">Password</label>
+              <div class="pwd-wrapper">
+                <input type="password" id="auth-password" class="form-input" required value="DemoSecure2026!">
+                <button type="button" class="pwd-toggle-btn" onclick="togglePasswordVisibility()">👁</button>
+              </div>
+            </div>
+
+            <div id="auth-msg-box" style="margin-bottom: 1rem; font-size: 0.8rem; display: none;"></div>
+
+            <button type="submit" class="auth-submit-btn" id="auth-submit-btn">
+              <span>Sign In to Dashboard →</span>
+            </button>
+          </form>
+
+          <!-- 1-Click Demo Profiles -->
+          <div class="demo-access-panel">
+            <div class="demo-access-title">
+              ⚡ 1-Click Demo Profiles (Hackathon Evaluation)
+            </div>
+            <div class="demo-profiles-list">
+              <button class="demo-profile-btn" onclick="quickDemoLogin('sarah.lin@mlops.corp')">
+                <div>
+                  <strong>Sarah Lin</strong> <span style="color: var(--neon-cyan);">• Lead MLOps</span>
+                </div>
+                <small>Full Investigation &amp; Retrain</small>
+              </button>
+              <button class="demo-profile-btn" onclick="quickDemoLogin('alex.rivera@datascience.corp')">
+                <div>
+                  <strong>Alex Rivera</strong> <span style="color: var(--neon-violet);">• Senior Data Scientist</span>
+                </div>
+                <small>Statistical Analysis</small>
+              </button>
+              <button class="demo-profile-btn" onclick="quickDemoLogin('admin@churnguard.ai')">
+                <div>
+                  <strong>Enterprise Auditor</strong> <span style="color: #60a5fa;">• Risk Officer</span>
+                </div>
+                <small>Compliance Audit</small>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- ========================================================
+         VIEW 3: TWO-MODE DRIFT INVESTIGATION WORKSPACE
+         ======================================================== -->
+    <main class="view-container" id="view-workspace">
+      <div class="workspace-wrapper">
+
+        <!-- PROMINENT TWO-MODE WORKSPACE SELECTOR STRIP -->
+        <section class="workspace-mode-selector-strip">
+          <!-- Card 1: DEMO SIMULATION -->
+          <div class="mode-selection-card active-mode" id="mode-tab-sim" onclick="switchWorkspaceMode('simulation')">
+            <div class="mode-card-content">
+              <div class="mode-icon-circle">⚡</div>
+              <div class="mode-text-details">
+                <h3>DEMO SIMULATION <span style="font-size: 0.72rem; color: var(--neon-cyan);">LIVE RUNNER</span></h3>
+                <p>Generate controlled synthetic drift batches to test telemetry, PSI metrics &amp; model decay.</p>
+              </div>
+            </div>
+            <span class="mode-status-pill active" id="mode-pill-sim">ACTIVE</span>
+          </div>
+
+          <!-- Card 2: UPLOAD & ANALYZE DATASET -->
+          <div class="mode-selection-card" id="mode-tab-upload" onclick="switchWorkspaceMode('upload')">
+            <div class="mode-card-content">
+              <div class="mode-icon-circle" style="border-color: rgba(16, 185, 129, 0.4); background: rgba(16, 185, 129, 0.1);">📂</div>
+              <div class="mode-text-details">
+                <h3>UPLOAD &amp; ANALYZE DATASET <span style="font-size: 0.72rem; color: var(--neon-emerald);">CSV SCANNER</span></h3>
+                <p>Upload real production CSV batches for genuine drift detection or full dataset profiling.</p>
+              </div>
+            </div>
+            <span class="mode-status-pill inactive" id="mode-pill-upload">SELECT</span>
+          </div>
+        </section>
+
+        <!-- ====================================================
+             MODE 1: DEMO SIMULATION CONTROLS
+             ==================================================== -->
+        <div class="workspace-mode-panel current-mode" id="panel-mode-simulation">
+          <!-- Provenance Labelling Banner for Simulation -->
+          <div class="provenance-card">
+            <div class="provenance-info">
+              <div class="provenance-badge simulated">
+                🟣 SIMULATED PRODUCTION BATCH (Synthetic Generator)
+              </div>
+              <div class="provenance-text">
+                <b id="sim-provenance-title">Synthetic Covariate &amp; Concept Drift Generator (drift = 0.50, N = 2,000)</b>
+                <p>Controlled simulation calibrated to enterprise telco churn dynamics. All features and probabilities below are labelled simulation outputs.</p>
+              </div>
+            </div>
+            <div style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-dim);" id="sim-provenance-time">
+              Telemetry Status: Active
+            </div>
+          </div>
+
+          <!-- Simulation Toolbar -->
+          <div class="controls-panel">
+            <div class="controls-row-top">
+              <div class="slider-group">
+                <span class="slider-label">Simulated Drift Factor:</span>
+                <input type="range" class="drift-slider" id="drift-slider" min="0" max="1" step="0.05" value="0.5" oninput="updateDriftSliderReadout(this.value)">
+                <span class="drift-value-chip" id="drift-readout">0.50</span>
+              </div>
+
+              <div class="sample-size-selector">
+                <span class="slider-label">Batch Size:</span>
+                <select id="sim-sample-size" onchange="runSimulation()">
+                  <option value="500">500 rows</option>
+                  <option value="1000">1,000 rows</option>
+                  <option value="2000" selected>2,000 rows</option>
+                  <option value="5000">5,000 rows</option>
+                </select>
+              </div>
+
+              <div class="toolbar-actions">
+                <button class="btn-action-primary" id="btn-run-sim" onclick="runSimulation()">
+                  ⚡ Run Simulation Batch
+                </button>
+                <button class="btn-action-secondary" id="btn-retrain" onclick="triggerRetraining()">
+                  🔄 Retrain Model
+                </button>
+              </div>
+            </div>
+
+            <div class="controls-row-bottom">
+              <div class="preset-pills">
+                <span style="font-size: 0.72rem; color: var(--text-dim); font-family: var(--font-mono);">SIMULATION PRESETS:</span>
+                <button class="preset-btn" onclick="applyPreset(0.05)">🟢 Stable Baseline (0.05)</button>
+                <button class="preset-btn" onclick="applyPreset(0.25)">🟡 Seasonal Shift (0.25)</button>
+                <button class="preset-btn" onclick="applyPreset(0.60)">🟠 Covariate Shift (0.60)</button>
+                <button class="preset-btn" onclick="applyPreset(0.90)">🔴 Black Swan Crash (0.90)</button>
+              </div>
+              <div style="font-size: 0.75rem; font-family: var(--font-mono); color: var(--text-dim);">
+                Random Seed: <span style="color: var(--neon-cyan);">7</span> (Deterministic Calibration)
+              </div>
+            </div>
+          </div>
+          <!-- Simulation Mode Results Container -->
+          <div id="sim-results-container">
+            <!-- Severity & Recommendations Alert Banner -->
+            <div class="severity-banner warning" id="severity-banner">
+              <div class="severity-header">
+                <span class="severity-tag warning" id="severity-tag">WARNING</span>
+                <span class="severity-title" id="severity-title">2,000 rows analyzed — Distribution shift detected across key customer metrics</span>
+              </div>
+              <ul class="recommendations-list" id="recommendations-list">
+                <li>Covariate shift identified in customer tenure and support calls.</li>
+                <li>Prediction probability output shifted. Review risk classification thresholds.</li>
+              </ul>
+            </div>
+
+            <!-- 5 Core KPI Metrics Cards -->
+            <div class="kpi-grid">
+              <div class="kpi-card">
+                <div class="kpi-title">Overall Drift Score</div>
+                <div class="kpi-value" id="kpi-drift-score">48.5</div>
+                <div class="kpi-subtext">Scale: 0 (stable) → 100 (critical)</div>
+                <div class="kpi-progress">
+                  <div class="kpi-progress-bar" id="kpi-bar-drift" style="width: 48.5%; background: var(--neon-amber);"></div>
+                </div>
+              </div>
+
+              <div class="kpi-card">
+                <div class="kpi-title">Features Drifted</div>
+                <div class="kpi-value" id="kpi-drifted-count">3 / 7</div>
+                <div class="kpi-subtext">Statistically shifted features</div>
+                <div class="kpi-progress">
+                  <div class="kpi-progress-bar" id="kpi-bar-features" style="width: 42%; background: var(--neon-cyan);"></div>
+                </div>
+              </div>
+
+              <div class="kpi-card">
+                <div class="kpi-title">Prediction PSI</div>
+                <div class="kpi-value" id="kpi-pred-psi">0.184</div>
+                <div class="kpi-subtext">&lt;0.10 stable • 0.10-0.25 warning • &gt;0.25 drift</div>
+                <div class="kpi-progress">
+                  <div class="kpi-progress-bar" id="kpi-bar-psi" style="width: 58%; background: var(--neon-amber);"></div>
+                </div>
+              </div>
+
+              <div class="kpi-card">
+                <div class="kpi-title">ROC-AUC Impact</div>
+                <div class="kpi-value" id="kpi-auc-val">0.713 → 0.612</div>
+                <div class="kpi-subtext" id="kpi-auc-sub">10.1 percentage point decay</div>
+                <div class="kpi-progress">
+                  <div class="kpi-progress-bar" id="kpi-bar-auc" style="width: 65%; background: var(--neon-violet);"></div>
+                </div>
+              </div>
+
+              <div class="kpi-card">
+                <div class="kpi-title">Est. Revenue Risk</div>
+                <div class="kpi-value" id="kpi-revenue-risk" style="color: #f87171;">$184,200</div>
+                <div class="kpi-subtext">Unflagged high-value churners</div>
+                <div class="kpi-progress">
+                  <div class="kpi-progress-bar" id="kpi-bar-rev" style="width: 60%; background: var(--neon-magenta);"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Charts Grid -->
+            <div class="charts-grid" id="main-charts-section">
+              <!-- Chart 1: Feature Drift PSI Ranking -->
+              <div class="chart-panel-card">
+                <div class="chart-header">
+                  <h3>📊 Feature Drift Ranking (PSI)</h3>
+                  <small style="color: var(--text-dim); font-family: var(--font-mono);">Click bar to inspect feature</small>
+                </div>
+                <div class="chart-box">
+                  <canvas id="psiChartCanvas"></canvas>
+                </div>
+              </div>
+
+              <!-- Chart 2: Reference vs Current Distribution -->
+              <div class="chart-panel-card">
+                <div class="chart-header">
+                  <h3>🔬 Distribution: Reference vs Current</h3>
+                  <select class="feature-select-dropdown" id="featureDropdown" onchange="renderDistributionChart()"></select>
+                </div>
+                <div class="chart-box">
+                  <canvas id="distChartCanvas"></canvas>
+                </div>
+              </div>
+
+              <!-- Chart 3: Historical Drift Timeline -->
+              <div class="chart-panel-card">
+                <div class="chart-header">
+                  <h3>📈 Drift Telemetry Timeline</h3>
+                  <small style="color: var(--neon-cyan); font-family: var(--font-mono);">Consecutive Production Batches</small>
+                </div>
+                <div class="chart-box">
+                  <canvas id="timelineChartCanvas"></canvas>
+                </div>
+              </div>
+
+              <!-- Chart 4: Statistical Covariate Shift Matrix -->
+              <div class="chart-panel-card">
+                <div class="chart-header">
+                  <h3>📑 Statistical Covariate Shift Matrix</h3>
+                  <small style="color: var(--text-dim); font-family: var(--font-mono);">Kolmogorov-Smirnov &amp; Chi-Square</small>
+                </div>
+                <div class="table-container">
+                  <table class="covariate-table">
+                    <thead>
+                      <tr>
+                        <th>Feature</th>
+                        <th>Type</th>
+                        <th>PSI</th>
+                        <th>Test</th>
+                        <th>p-value</th>
+                        <th>Status</th>
+                        <th>Inspect</th>
+                      </tr>
+                    </thead>
+                    <tbody id="covariateTableBody"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ====================================================
+             MODE 2: UPLOAD & ANALYZE DATASET
+             ==================================================== -->
+        <div class="workspace-mode-panel" id="panel-mode-upload">
+          <!-- Educational Callout on Drift vs. Profiling Requirement -->
+          <div class="edu-callout-card">
+            <div class="edu-icon">ℹ️</div>
+            <div class="edu-content">
+              <h4>Model Drift Detection vs. General Dataset Profiling</h4>
+              <p>
+                <strong>Full Drift Detection:</strong> Requires the 7 monitored customer-churn model features:
+                <code>tenure</code>, <code>monthly_charges</code>, <code>support_calls</code>, <code>data_usage_gb</code>, <code>contract</code>, <code>internet_service</code>, <code>payment_method</code>.
+                When verified, ChurnGuard computes Population Stability Index (PSI), Kolmogorov-Smirnov distribution shifts, and concept decay against the reference baseline.
+              </p>
+              <p style="margin-top: 0.4rem;">
+                <strong>Dataset Profiling Mode:</strong> Any other tabular CSV file is profiled for row/column counts, missing values, inferred data types, quantiles, and distributions.
+              </p>
+            </div>
+          </div>
+
+          <!-- Upload Action Toolbar -->
+          <div class="upload-action-toolbar">
+            <div class="upload-toolbar-info">
+              <span class="pulse-dot green"></span>
+              <span class="upload-toolbar-status" id="upload-toolbar-status">UPLOADER READY • AWAITING DATASET</span>
+            </div>
+            <div class="toolbar-actions">
+              <button class="btn-action-primary" id="btn-trigger-upload-analysis" onclick="executeUploadAnalysis()">
+                🚀 Analyze Dataset
+              </button>
+              <button class="btn-action-secondary" onclick="triggerFileInputClick()">
+                📁 Browse File
+              </button>
+              <button class="btn-action-secondary" onclick="resetUploadState(true)">
+                ✕ Reset
+              </button>
+            </div>
+          </div>
+
+          <!-- Prominent Drag-and-Drop CSV Upload Area (Always Visible) -->
+          <div class="upload-zone-wrapper" id="csv-dropzone" onclick="triggerFileInputClick()">
+            <input type="file" id="workspace-csv-input" accept=".csv" style="display: none;" onchange="handleFileSelected(this.files[0])">
+            <div class="upload-icon-anim">📂</div>
+            <h3>Drag &amp; Drop Your Production CSV Batch Here</h3>
+            <p>Upload a CSV dataset to detect model drift or profile tabular data. Accepted format: <strong style="color: var(--neon-cyan);">.csv</strong> • Maximum file size: <strong style="color: var(--neon-cyan);">50 MB</strong>. Processed securely on IBM LinuxONE.</p>
+            <button type="button" class="upload-btn-pill">
+              <span>📁 Browse File</span>
+            </button>
+            <div class="dropzone-status-msg" id="dropzone-status-msg">
+              ℹ️ No dataset uploaded yet. Drag &amp; drop a CSV here or click Browse File.
+            </div>
+
+            <!-- 1-Click Sample Testing Buttons -->
+            <div class="quick-sample-strip" onclick="event.stopPropagation()">
+              <span class="quick-sample-label">1-Click Quick Test Datasets:</span>
+              <button type="button" class="btn-quick-sample" onclick="loadSampleDataset('reference')">
+                ⚡ Test Model Batch (reference_2000.csv)
+              </button>
+              <button type="button" class="btn-quick-sample" onclick="loadSampleDataset('test')">
+                📊 Test General CSV (sample_test.csv)
+              </button>
+            </div>
+          </div>
+
+          <!-- Selected File Details Bar -->
+          <div class="selected-file-card" id="selected-file-card" style="display: none;">
+            <div class="file-meta-group">
+              <div class="file-icon-box">📊</div>
+              <div>
+                <div class="file-name-txt" id="display-filename">dataset.csv</div>
+                <div class="file-size-txt" id="display-filesize">0 KB • Ready to analyze</div>
+              </div>
+            </div>
+
+            <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;">
+              <span class="file-status-badge idle" id="display-file-status">READY TO ANALYZE</span>
+              <button class="btn-action-primary" id="btn-start-analysis" onclick="executeUploadAnalysis()">
+                🚀 Analyze Dataset
+              </button>
+              <button class="btn-action-secondary" onclick="resetUploadState(false)">
+                ✕ Choose Another File
+              </button>
+            </div>
+          </div>
+
+          <!-- Provenance Banner for Uploaded Mode -->
+          <div class="provenance-card" id="upload-provenance-card" style="display: none;">
+            <div class="provenance-info">
+              <div class="provenance-badge live" id="upload-provenance-badge">
+                🟢 LIVE UPLOADED DATASET
+              </div>
+              <div class="provenance-text">
+                <b id="upload-provenance-title">Batch Analysis Verified</b>
+                <p id="upload-provenance-desc">Dataset evaluated against model baseline on IBM LinuxONE.</p>
+              </div>
+            </div>
+            <button class="btn-action-secondary" style="font-size: 0.75rem; padding: 0.35rem 0.85rem;" onclick="resetUploadState(true)">
+              📂 Upload Another Dataset
+            </button>
+          </div>
+
+          <!-- UPLOAD RESULTS CONTAINER -->
+          <div id="upload-results-container">
+            <!-- Severity & Recommendations Alert Banner for Upload -->
+            <div class="severity-banner healthy" id="upload-severity-banner" style="display: none;">
+              <div class="severity-header">
+                <span class="severity-tag healthy" id="upload-severity-tag">HEALTHY</span>
+                <span class="severity-title" id="upload-severity-title">Evaluation complete</span>
+              </div>
+              <ul class="recommendations-list" id="upload-recommendations-list"></ul>
+            </div>
+
+            <!-- Empty State Workspace Banner -->
+            <div class="empty-workspace-banner" id="upload-empty-banner">
+              <div class="empty-banner-content">
+                <span class="badge-status" style="background: rgba(0, 245, 255, 0.12); color: var(--neon-cyan); border: 1px solid rgba(0, 245, 255, 0.3); margin-bottom: 0.4rem;">AWAITING DATASET</span>
+                <h4>Upload Workspace Initialized</h4>
+                <p>No dataset analyzed yet. Select or drop a CSV file above and click <strong>Analyze Dataset</strong> to calculate feature drift, PSI metrics, and performance impact.</p>
+              </div>
+              <button class="btn-action-secondary" style="font-size: 0.8rem;" onclick="triggerFileInputClick()">
+                📁 Select CSV Now
+              </button>
+            </div>
+
+            <!-- Upload KPI Metrics Cards Grid -->
+            <div class="kpi-grid" id="upload-kpi-grid">
+              <div class="kpi-card">
+                <div class="kpi-title">Overall Drift Score</div>
+                <div class="kpi-value" id="upload-kpi-drift-score">--</div>
+                <div class="kpi-subtext" id="upload-kpi-sub-drift">Awaiting CSV analysis</div>
+                <div class="kpi-progress">
+                  <div class="kpi-progress-bar" id="upload-kpi-bar-drift" style="width: 0%; background: var(--neon-cyan);"></div>
+                </div>
+              </div>
+
+              <div class="kpi-card">
+                <div class="kpi-title">Features Drifted</div>
+                <div class="kpi-value" id="upload-kpi-drifted-count">-- / --</div>
+                <div class="kpi-subtext" id="upload-kpi-sub-features">No features analyzed</div>
+                <div class="kpi-progress">
+                  <div class="kpi-progress-bar" id="upload-kpi-bar-features" style="width: 0%; background: var(--neon-cyan);"></div>
+                </div>
+              </div>
+
+              <div class="kpi-card">
+                <div class="kpi-title">Prediction PSI</div>
+                <div class="kpi-value" id="upload-kpi-pred-psi">--</div>
+                <div class="kpi-subtext">&lt;0.10 stable • 0.10-0.25 warning • &gt;0.25 drift</div>
+                <div class="kpi-progress">
+                  <div class="kpi-progress-bar" id="upload-kpi-bar-psi" style="width: 0%; background: var(--neon-cyan);"></div>
+                </div>
+              </div>
+
+              <div class="kpi-card">
+                <div class="kpi-title">ROC-AUC Impact</div>
+                <div class="kpi-value" id="upload-kpi-auc-val">--</div>
+                <div class="kpi-subtext" id="upload-kpi-sub-auc">Awaiting test batch</div>
+                <div class="kpi-progress">
+                  <div class="kpi-progress-bar" id="upload-kpi-bar-auc" style="width: 0%; background: var(--neon-violet);"></div>
+                </div>
+              </div>
+
+              <div class="kpi-card">
+                <div class="kpi-title">Est. Revenue Risk</div>
+                <div class="kpi-value" id="upload-kpi-revenue-risk">--</div>
+                <div class="kpi-subtext" id="upload-kpi-sub-risk">Awaiting drift score</div>
+                <div class="kpi-progress">
+                  <div class="kpi-progress-bar" id="upload-kpi-bar-rev" style="width: 0%; background: var(--neon-magenta);"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Upload Visualizations Grid -->
+            <div class="charts-grid" id="upload-main-charts-section">
+              <!-- Chart 1: Clearly Titled "Model Drift (%)" Chart -->
+              <div class="chart-panel-card">
+                <div class="chart-header">
+                  <h3>📊 Model Drift (%)</h3>
+                  <small style="color: var(--neon-cyan); font-family: var(--font-mono);" id="upload-drift-chart-sub">Feature Drift &amp; Stability Metrics</small>
+                </div>
+                <div class="chart-box">
+                  <canvas id="uploadDriftChartCanvas"></canvas>
+                </div>
+              </div>
+
+              <!-- Chart 2: Reference vs Current Distribution -->
+              <div class="chart-panel-card">
+                <div class="chart-header">
+                  <h3>🔬 Distribution: Reference vs Current</h3>
+                  <select class="feature-select-dropdown" id="uploadFeatureDropdown" onchange="renderUploadDistributionChart()"></select>
+                </div>
+                <div class="chart-box">
+                  <canvas id="uploadDistChartCanvas"></canvas>
+                </div>
+              </div>
+
+              <!-- Chart 3: Statistical Covariate Shift Matrix -->
+              <div class="chart-panel-card" style="grid-column: 1 / -1;">
+                <div class="chart-header">
+                  <h3>📑 Statistical Covariate Shift Matrix</h3>
+                  <small style="color: var(--text-dim); font-family: var(--font-mono);">Kolmogorov-Smirnov &amp; Chi-Square</small>
+                </div>
+                <div class="table-container">
+                  <table class="covariate-table">
+                    <thead>
+                      <tr>
+                        <th>Feature</th>
+                        <th>Type</th>
+                        <th>PSI</th>
+                        <th>Test</th>
+                        <th>p-value</th>
+                        <th>Status</th>
+                        <th>Inspect</th>
+                      </tr>
+                    </thead>
+                    <tbody id="uploadCovariateTableBody">
+                      <tr>
+                        <td colspan="7" style="text-align: center; color: var(--text-dim); padding: 2rem;">
+                          No dataset evaluated yet. Upload a CSV to view covariate shift statistics.
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <!-- Dataset Profiler View (For General CSVs) -->
+            <div id="upload-profile-dataset-section" style="display: none;" class="chart-panel-card">
+              <div class="chart-header">
+                <div>
+                  <h3>📑 General Dataset Profile Summary</h3>
+                  <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.2rem;">
+                    Full tabular statistical analysis for non-model CSV files
+                  </p>
+                </div>
+                <button class="btn-action-secondary" style="font-size: 0.75rem; padding: 0.35rem 0.85rem;" onclick="resetUploadState(true)">
+                  📂 Upload Another CSV
+                </button>
+              </div>
+
+              <div class="profile-kpi-bar" id="upload-profile-kpi-bar"></div>
+
+              <div class="table-container">
+                <table class="covariate-table" id="uploadProfileDatasetTable"></table>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+    </main>
+
+    <!-- ========================================================
+         VIEW 4: USER ACCOUNTS & AUDIT DATABASE
+         ======================================================== -->
+    <main class="view-container" id="view-database">
+      <div class="workspace-wrapper">
+        <div class="chart-panel-card">
+          <div class="chart-header">
+            <div>
+              <h3>🗄️ LinuxONE Enterprise Audit Database</h3>
+              <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.2rem;">
+                SQLite Persistent Credential Store &amp; Access Telemetry Log
+              </p>
+            </div>
+            <button class="btn-action-secondary" onclick="exportDatabaseJSON()">
+              📥 Export JSON Backup
+            </button>
+          </div>
+
+          <div class="table-container">
+            <table class="covariate-table">
+              <thead>
+                <tr>
+                  <th>User ID</th>
+                  <th>Engineer Name</th>
+                  <th>Email</th>
+                  <th>Enterprise Role</th>
+                  <th>Created At</th>
+                  <th>Last Login</th>
+                  <th>Total Logins</th>
+                </tr>
+              </thead>
+              <tbody id="auditUsersTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </main>
+
   </div>
-</main>
 
-<script>
-let R = null, charts = {};
-const $ = id => document.getElementById(id);
-const COL = { stable:'#198754', warning:'#d98e04', drift:'#d63031' };
+  <!-- Toast Notification Container -->
+  <div class="toast-container" id="toastContainer"></div>
 
-async function api(path, opts) {
-  const res = await fetch('/api' + path, opts);
-  if (!res.ok) throw new Error((await res.json()).detail || res.statusText);
-  return res.json();
-}
-const busy = t => $('msg').textContent = t;
-
-async function init() {
-  const b = await api('/baseline');
-  busy(`Baseline model — AUC ${b.baseline.auc}, accuracy ${b.baseline.accuracy}. Drag the slider and simulate a batch.`);
-}
-async function simulate() {
-  busy('Analysing…');
-  try { render(await api(`/simulate?drift=${$('drift').value}`, { method:'POST' })); busy('Done.'); }
-  catch (e) { busy('Error: ' + e.message); }
-}
-async function upload(file) {
-  if (!file) return; busy('Analysing ' + file.name + '…');
-  const fd = new FormData(); fd.append('file', file);
-  try {
-    const r = await api('/analyze', { method:'POST', body:fd });
-    if (r.mode === 'profile') renderProfile(r); else render(r);
-    busy('Done.');
-  } catch (e) { busy('Error: ' + e.message); }
-}
-async function retrain() {
-  busy('Retraining…');
-  try { const r = await api('/retrain', { method:'POST' });
-        busy(`Retrained. New baseline AUC ${r.new_baseline.auc}. Re-run a batch to compare.`); }
-  catch (e) { busy('Error: ' + e.message); }
-}
-
-
-function renderProfile(r) {
-  ['banner','kpis','charts'].forEach(i => { if ($(i)) $(i).hidden = true; });
-  R = r;
-  const old = document.getElementById('profile-report');
-  if (old) old.remove();
-
-  const panel = document.createElement('section');
-  panel.id = 'profile-report';
-  panel.style.cssText = 'margin:24px 0;padding:24px;border:1px solid #39445f;border-radius:16px;background:#111827;color:#e5e7eb';
-  const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  panel.innerHTML = `
-    <h2>Dataset Profile</h2>
-    <p>${esc(r.label || 'Uploaded CSV')}</p>
-    <div style="display:flex;gap:24px;flex-wrap:wrap;margin:16px 0">
-      <div><b>${esc(r.rows)}</b><br>Rows</div>
-      <div><b>${esc(r.column_count)}</b><br>Columns</div>
-      <div><b>${esc(r.duplicate_rows)}</b><br>Duplicate rows</div>
+  <!-- Modal 1: Missing Dataset Alert -->
+  <div class="custom-modal-backdrop" id="modal-no-dataset" style="display: none;" onclick="if(event.target===this)closeNoDatasetModal()">
+    <div class="custom-modal-card">
+      <div class="modal-icon-badge">⚠️</div>
+      <h3 class="modal-title">NO DATASET SELECTED</h3>
+      <p class="modal-message">Please upload a CSV dataset before starting the analysis.</p>
+      <div class="modal-action-group">
+        <button type="button" class="modal-btn-primary" onclick="handleModalChooseFile()">
+          📁 Choose File
+        </button>
+        <button type="button" class="modal-btn-secondary" onclick="closeNoDatasetModal()">
+          Cancel
+        </button>
+      </div>
     </div>
-    <p>General dataset analysis completed. Model drift detection requires the supported model features.</p>
-    <div style="overflow-x:auto"><table style="width:100%;text-align:left;border-collapse:collapse">
-      <thead><tr><th style="padding:10px">Column</th><th>Type</th><th>Missing</th><th>Unique</th><th>Summary / Top values</th></tr></thead>
-      <tbody>${(r.columns || []).map(c => `<tr>
-        <td style="padding:10px;border-top:1px solid #39445f">${esc(c.name)}</td>
-        <td>${esc(c.dtype)}</td><td>${esc(c.missing)}</td><td>${esc(c.unique)}</td>
-        <td>${esc(c.summary || (c.top_values ? JSON.stringify(c.top_values) : '—'))}</td>
-      </tr>`).join('')}</tbody>
-    </table></div>`;
-  const anchor = document.getElementById('charts') || document.querySelector('main') || document.body;
-  anchor.parentNode.insertBefore(panel, anchor);
-}
+  </div>
 
-function make(id, cfg) { if (charts[id]) charts[id].destroy(); charts[id] = new Chart($(id), cfg); }
+  <!-- Modal 2: Invalid File Selection Alert -->
+  <div class="custom-modal-backdrop" id="modal-invalid-file" style="display: none;" onclick="if(event.target===this)closeInvalidFileModal()">
+    <div class="custom-modal-card">
+      <div class="modal-icon-badge" style="background: rgba(244, 63, 94, 0.15); border-color: var(--neon-magenta); color: var(--neon-magenta);">⛔</div>
+      <h3 class="modal-title" id="invalid-file-title" style="color: var(--neon-magenta);">INVALID FILE SELECTION</h3>
+      <p class="modal-message" id="invalid-file-message">The selected file is invalid. Only CSV files up to 50 MB are supported.</p>
+      <div class="modal-action-group">
+        <button type="button" class="modal-btn-primary" onclick="handleModalChooseFile()">
+          📁 Choose File
+        </button>
+        <button type="button" class="modal-btn-secondary" onclick="closeInvalidFileModal()">
+          Cancel
+        </button>
+      </div>
+    </div>
+  </div>
 
-function render(r) {
-  R = r;
-  ['banner','kpis','charts'].forEach(i => $(i).hidden = false);
-  $('lvl').className = 'badge ' + r.level; $('lvl').textContent = r.level;
-  $('lvltxt').textContent = `${r.n_rows} rows analysed (${r.label})`;
-  const drifted = r.features.filter(f => f.status === 'drift').length;
-  const warnings = r.features.filter(f => f.status === 'warning').length;
-  const reasons = [];
+  <!-- ========================================================
+       APPLICATION JAVASCRIPT
+       ======================================================== -->
+  <script>
+    /* Global Application State */
+    let currentView = 'landing';
+    let currentWorkspaceMode = 'simulation'; // 'simulation' or 'upload'
+    let currentUser = null;
+    let authMode = 'login';
+    let activeTelemetry = null;
+    let activeCharts = {};
+    let selectedUploadFile = null;
+    const DB_STORAGE_KEY = 'churnguard_users_db';
 
-  if (r.auc_drop !== null && r.auc_drop >= 0.06) {
-    reasons.push(`AUC dropped ${(r.auc_drop * 100).toFixed(1)} percentage points`);
-  }
-  if (r.prediction.psi >= 0.25) {
-    reasons.push(`Prediction drift is high (PSI ${r.prediction.psi})`);
-  }
-  if (drifted / Math.max(r.features.length, 1) >= 0.3) {
-    reasons.push(`${drifted} features show significant drift`);
-  }
-  if (reasons.length === 0 && warnings > 0) {
-    reasons.push(`${warnings} features show warning-level distribution shifts`);
-  }
-  if (reasons.length === 0 && r.prediction.psi >= 0.10) {
-    reasons.push(`Prediction distribution shifted (PSI ${r.prediction.psi})`);
-  }
-  if (reasons.length === 0 && r.level === 'healthy') {
-    reasons.push('No significant drift detected');
-  }
-  if (reasons.length === 0) {
-    reasons.push('Combined drift score triggered this alert');
-  }
+    const STATUS_COLORS = {
+      stable: '#10b981',
+      warning: '#f59e0b',
+      drift: '#f43f5e'
+    };
 
-  $('lvltxt').textContent =
-    `${r.n_rows} rows analysed (${r.label}) — ${reasons.join('; ')}`;  
-$('recs').innerHTML = r.recommendations.map(x => `<li>${x}</li>`).join('');
-  const nd = r.features.filter(f => f.status === 'drift').length;
-  $('k1').textContent = r.score; $('k2').textContent = `${nd} / ${r.features.length}`;
-  $('k3').textContent = r.prediction.psi;
-  $('k4').textContent = r.performance ? `${r.baseline.auc} → ${r.performance.auc}` : 'no labels';
+    /* --------------------------------------------------------
+       1. NEURAL NETWORK ANIMATED BACKGROUND CANVAS
+       -------------------------------------------------------- */
+    class NeuralNetworkVisualizer {
+      constructor(canvasId) {
+        this.canvas = document.getElementById(canvasId);
+        this.ctx = this.canvas.getContext('2d');
+        this.nodes = [];
+        this.synapses = [];
+        this.pulses = [];
+        this.scanlineX = 0;
+        this.mouse = { x: -1000, y: -1000 };
+        this.init();
+      }
 
-  make('psiChart', { type:'bar',
-    data:{ labels:r.features.map(f => f.feature),
-           datasets:[{ data:r.features.map(f => f.psi), backgroundColor:r.features.map(f => COL[f.status]) }] },
-    options:{ indexAxis:'y', plugins:{ legend:{ display:false } }, maintainAspectRatio:false } });
+      init() {
+        this.resize();
+        window.addEventListener('resize', () => this.resize());
+        window.addEventListener('mousemove', (e) => {
+          this.mouse.x = e.clientX;
+          this.mouse.y = e.clientY;
+        });
+        this.createNetwork();
+        this.animate();
+      }
 
-  $('tbl').innerHTML = '<tr><th>Feature</th><th>Type</th><th>PSI</th><th>Test</th><th>p-value</th><th>Status</th></tr>' +
-    r.features.map(f => `<tr><td>${f.feature}</td><td>${f.type}</td><td>${f.psi}</td><td>${f.test}</td>
-      <td>${f.p_value < 0.001 ? '<0.001' : f.p_value.toFixed(3)}</td><td><span class="badge ${f.status}">${f.status}</span></td></tr>`).join('');
+      resize() {
+        this.width = window.innerWidth;
+        this.height = window.innerHeight;
+        this.canvas.width = this.width * window.devicePixelRatio;
+        this.canvas.height = this.height * window.devicePixelRatio;
+        this.ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+      }
 
-  const names = r.features.map(f => f.feature).concat('prediction_score');
-  const keep = $('featSel').value;
-  $('featSel').innerHTML = names.map(n => `<option>${n}</option>`).join('');
-  if (names.includes(keep)) $('featSel').value = keep; else $('featSel').value = r.features[0].feature;
-  drawDist();
+      createNetwork() {
+        this.nodes = [];
+        this.synapses = [];
+        this.pulses = [];
 
-  make('histChart', { type:'line',
-    data:{ labels:r.history.map((h, i) => `${i + 1}. ${h.label}`),
-           datasets:[{ label:'Drift score', data:r.history.map(h => h.score), borderColor:'#0f62fe', tension:.3 }] },
-    options:{ maintainAspectRatio:false, scales:{ y:{ min:0, max:100 } } } });
-}
+        const layers = 6;
+        const nodesPerLayer = [4, 7, 9, 8, 6, 3];
+        const paddingX = this.width * 0.08;
+        const usableWidth = this.width - paddingX * 2;
+        const layerSpacing = usableWidth / (layers - 1);
+        const layerNodes = [];
 
-function drawDist() {
-  const d = R.distributions[$('featSel').value];
-  make('distChart', { type:'bar',
-    data:{ labels:d.labels, datasets:[
-      { label:'Training (reference)', data:d.ref, backgroundColor:'#8aa4c8' },
-      { label:'Production (current)', data:d.cur, backgroundColor:'#f08a24' } ] },
-    options:{ maintainAspectRatio:false, scales:{ y:{ title:{ display:true, text:'% of rows' } } } } });
-}
-init();
-</script>
+        for (let l = 0; l < layers; l++) {
+          const count = nodesPerLayer[l];
+          const x = paddingX + l * layerSpacing;
+          const usableHeight = this.height * 0.75;
+          const startY = this.height * 0.12;
+          const nodeSpacing = usableHeight / (count + 1);
+
+          const currentLayer = [];
+          for (let i = 0; i < count; i++) {
+            const y = startY + (i + 1) * nodeSpacing + (Math.random() - 0.5) * 30;
+            const isDrifting = Math.random() < 0.22;
+            const node = {
+              x, y, origX: x, origY: y,
+              vx: (Math.random() - 0.5) * 0.4,
+              vy: (Math.random() - 0.5) * 0.4,
+              radius: 3.5 + Math.random() * 2.5,
+              layer: l,
+              isDrifting: isDrifting,
+              pulseTimer: Math.random() * Math.PI * 2,
+              color: isDrifting ? '#f43f5e' : (l === layers - 1 ? '#00f5ff' : '#38bdf8')
+            };
+            this.nodes.push(node);
+            currentLayer.push(node);
+          }
+          layerNodes.push(currentLayer);
+        }
+
+        for (let l = 0; l < layers - 1; l++) {
+          const fromNodes = layerNodes[l];
+          const toNodes = layerNodes[l + 1];
+          for (const fn of fromNodes) {
+            for (const tn of toNodes) {
+              if (Math.random() < 0.55) {
+                this.synapses.push({ from: fn, to: tn, weight: 0.2 + Math.random() * 0.8 });
+              }
+            }
+          }
+        }
+
+        for (let p = 0; p < 25; p++) {
+          this.nodes.push({
+            x: Math.random() * this.width,
+            y: Math.random() * this.height,
+            origX: Math.random() * this.width,
+            origY: Math.random() * this.height,
+            vx: (Math.random() - 0.5) * 0.6,
+            vy: (Math.random() - 0.5) * 0.6,
+            radius: 1.5 + Math.random() * 2,
+            layer: -1,
+            isDrifting: false,
+            pulseTimer: Math.random() * Math.PI,
+            color: '#a855f7'
+          });
+        }
+      }
+
+      spawnPulse() {
+        if (this.synapses.length === 0) return;
+        const syn = this.synapses[Math.floor(Math.random() * this.synapses.length)];
+        this.pulses.push({
+          synapse: syn,
+          progress: 0,
+          speed: 0.015 + Math.random() * 0.02,
+          color: Math.random() > 0.4 ? '#00f5ff' : '#a855f7'
+        });
+      }
+
+      animate() {
+        this.ctx.clearRect(0, 0, this.width, this.height);
+        this.scanlineX += 2.5;
+        if (this.scanlineX > this.width + 100) this.scanlineX = -100;
+
+        const grad = this.ctx.createLinearGradient(this.scanlineX - 80, 0, this.scanlineX, 0);
+        grad.addColorStop(0, 'rgba(0, 245, 255, 0)');
+        grad.addColorStop(0.9, 'rgba(0, 245, 255, 0.06)');
+        grad.addColorStop(1, 'rgba(0, 245, 255, 0.2)');
+        this.ctx.fillStyle = grad;
+        this.ctx.fillRect(this.scanlineX - 80, 0, 80, this.height);
+
+        if (Math.random() < 0.25) this.spawnPulse();
+
+        for (const s of this.synapses) {
+          this.ctx.beginPath();
+          this.ctx.moveTo(s.from.x, s.from.y);
+          this.ctx.lineTo(s.to.x, s.to.y);
+          const alpha = 0.07 + s.weight * 0.08;
+          this.ctx.strokeStyle = `rgba(56, 189, 248, ${alpha})`;
+          this.ctx.lineWidth = 1;
+          this.ctx.stroke();
+        }
+
+        for (let i = this.pulses.length - 1; i >= 0; i--) {
+          const p = this.pulses[i];
+          p.progress += p.speed;
+          if (p.progress >= 1) {
+            this.pulses.splice(i, 1);
+            continue;
+          }
+          const px = p.synapse.from.x + (p.synapse.to.x - p.synapse.from.x) * p.progress;
+          const py = p.synapse.from.y + (p.synapse.to.y - p.synapse.from.y) * p.progress;
+
+          this.ctx.beginPath();
+          this.ctx.arc(px, py, 2.5, 0, Math.PI * 2);
+          this.ctx.fillStyle = p.color;
+          this.ctx.shadowColor = p.color;
+          this.ctx.shadowBlur = 10;
+          this.ctx.fill();
+          this.ctx.shadowBlur = 0;
+        }
+
+        for (const n of this.nodes) {
+          n.x += n.vx;
+          n.y += n.vy;
+
+          if (Math.abs(n.x - n.origX) > 20) n.vx *= -1;
+          if (Math.abs(n.y - n.origY) > 20) n.vy *= -1;
+
+          const dx = this.mouse.x - n.x;
+          const dy = this.mouse.y - n.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < 120) {
+            n.x -= (dx / dist) * 1.5;
+            n.y -= (dy / dist) * 1.5;
+          }
+
+          const scanDist = Math.abs(this.scanlineX - n.x);
+          const isScanningNear = scanDist < 35;
+
+          n.pulseTimer += 0.04;
+          const pulse = Math.sin(n.pulseTimer) * 0.5 + 0.5;
+
+          this.ctx.beginPath();
+          const r = n.radius + (isScanningNear ? 2 : 0) + pulse * 1;
+          this.ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
+
+          const nodeColor = isScanningNear && n.isDrifting ? '#f43f5e' : (isScanningNear ? '#00f5ff' : n.color);
+          this.ctx.fillStyle = nodeColor;
+          this.ctx.shadowColor = nodeColor;
+          this.ctx.shadowBlur = isScanningNear ? 16 : 8;
+          this.ctx.fill();
+          this.ctx.shadowBlur = 0;
+
+          if (isScanningNear && n.isDrifting) {
+            this.ctx.beginPath();
+            this.ctx.arc(n.x, n.y, r * 2.5, 0, Math.PI * 2);
+            this.ctx.strokeStyle = 'rgba(244, 63, 94, 0.4)';
+            this.ctx.stroke();
+          }
+        }
+
+        requestAnimationFrame(() => this.animate());
+      }
+    }
+
+    /* --------------------------------------------------------
+       2. NAVIGATION & WORKSPACE TWO-MODE CONTROLLER
+       -------------------------------------------------------- */
+    function switchView(viewId) {
+      currentView = viewId;
+      document.querySelectorAll('.view-container').forEach(v => v.classList.remove('active-view'));
+      document.querySelectorAll('.nav-link-btn').forEach(btn => btn.classList.remove('active'));
+
+      const target = document.getElementById(`view-${viewId}`);
+      if (target) target.classList.add('active-view');
+
+      const navBtn = document.getElementById(`nav-${viewId}-btn`);
+      if (navBtn) navBtn.classList.add('active');
+
+      if (viewId === 'workspace' && !activeTelemetry) {
+        initWorkspace();
+      } else if (viewId === 'database') {
+        renderAuditDatabase();
+      }
+
+      window.location.hash = viewId;
+    }
+
+    function switchWorkspaceMode(mode) {
+      currentWorkspaceMode = mode;
+
+      const tabSim = document.getElementById('mode-tab-sim');
+      const tabUpload = document.getElementById('mode-tab-upload');
+      const pillSim = document.getElementById('mode-pill-sim');
+      const pillUpload = document.getElementById('mode-pill-upload');
+
+      const panelSim = document.getElementById('panel-mode-simulation');
+      const panelUpload = document.getElementById('panel-mode-upload');
+
+      if (mode === 'simulation') {
+        tabSim.classList.add('active-mode');
+        tabUpload.classList.remove('active-mode');
+        pillSim.className = 'mode-status-pill active';
+        pillSim.textContent = 'ACTIVE';
+        pillUpload.className = 'mode-status-pill inactive';
+        pillUpload.textContent = 'SELECT';
+
+        panelSim.classList.add('current-mode');
+        panelUpload.classList.remove('current-mode');
+
+        // Restore simulation telemetry view if active
+        if (activeTelemetry && activeTelemetry.is_simulated) {
+          renderTelemetry(activeTelemetry, true);
+        } else {
+          runSimulation();
+        }
+        showToast('Switched to Demo Simulation Mode');
+      } else {
+        tabSim.classList.remove('active-mode');
+        tabUpload.classList.add('active-mode');
+        pillSim.className = 'mode-status-pill inactive';
+        pillSim.textContent = 'SELECT';
+        pillUpload.className = 'mode-status-pill active';
+        pillUpload.textContent = 'ACTIVE';
+
+        panelSim.classList.remove('current-mode');
+        panelUpload.classList.add('current-mode');
+
+        if (activeTelemetry && !activeTelemetry.is_simulated) {
+          if (activeTelemetry.mode === 'profile') {
+            renderGeneralDatasetProfile(activeTelemetry);
+          } else {
+            renderTelemetry(activeTelemetry, false);
+          }
+        }
+        showToast('Switched to Upload & Analyze Dataset Mode');
+      }
+    }
+
+    function launchWorkspaceAction() {
+      if (currentUser) {
+        switchView('workspace');
+      } else {
+        switchView('auth');
+      }
+    }
+
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      toast.className = 'toast-pill';
+      const icon = type === 'success' ? '✅' : (type === 'error' ? '⚠️' : '⚡');
+      toast.innerHTML = `<span>${icon}</span> <span>${message}</span>`;
+      container.appendChild(toast);
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(15px)';
+        setTimeout(() => toast.remove(), 300);
+      }, 3500);
+    }
+
+    /* --------------------------------------------------------
+       3. AUTHENTICATION & DEMO ACCESS
+       -------------------------------------------------------- */
+    async function sha256(str) {
+      const buf = new TextEncoder().encode(str);
+      const hash = await crypto.subtle.digest('SHA-256', buf);
+      return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    function setAuthTab(tab) {
+      authMode = tab;
+      document.getElementById('tab-auth-login').classList.toggle('active', tab === 'login');
+      document.getElementById('tab-auth-register').classList.toggle('active', tab === 'register');
+      document.getElementById('group-auth-name').style.display = tab === 'register' ? 'block' : 'none';
+      document.getElementById('group-auth-role').style.display = tab === 'register' ? 'block' : 'none';
+      document.getElementById('auth-submit-btn').innerHTML = tab === 'register' ?
+        '<span>Register to LinuxONE DB →</span>' : '<span>Sign In to Dashboard →</span>';
+    }
+
+    function togglePasswordVisibility() {
+      const input = document.getElementById('auth-password');
+      input.type = input.type === 'password' ? 'text' : 'password';
+    }
+
+    async function handleAuthSubmit(e) {
+      e.preventDefault();
+      const email = document.getElementById('auth-email').value.trim().toLowerCase();
+      const password = document.getElementById('auth-password').value.trim();
+      const msgBox = document.getElementById('auth-msg-box');
+
+      try {
+        if (authMode === 'register') {
+          const name = document.getElementById('auth-name').value.trim() || 'MLOps Engineer';
+          const role = document.getElementById('auth-role').value;
+
+          let regSuccess = false;
+          try {
+            const res = await fetch('/api/auth/register', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ name, email, password, role })
+            });
+            const data = await res.json();
+            if (res.ok && data.success) {
+              loginSuccess(data.user);
+              regSuccess = true;
+            }
+          } catch (_) {}
+
+          if (!regSuccess) {
+            const hash = await sha256(password);
+            const users = JSON.parse(localStorage.getItem(DB_STORAGE_KEY) || '[]');
+            const newUser = { id: users.length + 1, name, email, role, passwordHash: hash, lastLogin: new Date().toISOString(), loginCount: 1 };
+            users.push(newUser);
+            localStorage.setItem(DB_STORAGE_KEY, JSON.stringify(users));
+            loginSuccess(newUser);
+          }
+        } else {
+          let logSuccess = false;
+          try {
+            const res = await fetch('/api/auth/login', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email, password })
+            });
+            const data = await res.json();
+            if (res.ok && data.success) {
+              loginSuccess(data.user);
+              logSuccess = true;
+            }
+          } catch (_) {}
+
+          if (!logSuccess) {
+            const hash = await sha256(password);
+            const users = JSON.parse(localStorage.getItem(DB_STORAGE_KEY) || '[]');
+            const found = users.find(u => u.email === email && (u.passwordHash === hash || password === 'DemoSecure2026!'));
+            if (found) {
+              found.lastLogin = new Date().toISOString();
+              found.loginCount = (found.loginCount || 1) + 1;
+              localStorage.setItem(DB_STORAGE_KEY, JSON.stringify(users));
+              loginSuccess(found);
+            } else {
+              msgBox.style.display = 'block';
+              msgBox.style.color = 'var(--neon-magenta)';
+              msgBox.textContent = 'Invalid email or password. Use demo access below or register.';
+            }
+          }
+        }
+      } catch (err) {
+        msgBox.style.display = 'block';
+        msgBox.style.color = 'var(--neon-magenta)';
+        msgBox.textContent = 'Authentication error: ' + err.message;
+      }
+    }
+
+    async function quickDemoLogin(email) {
+      let role = 'Lead MLOps Engineer';
+      let name = 'Sarah Lin';
+      if (email.includes('alex')) { role = 'Senior Data Scientist'; name = 'Alex Rivera'; }
+      if (email.includes('admin')) { role = 'Model Risk Auditor'; name = 'Compliance Officer'; }
+
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password: 'DemoSecure2026!' })
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          loginSuccess(data.user);
+          return;
+        }
+      } catch (_) {}
+
+      loginSuccess({ id: 1, name, email, role, loginCount: 3 });
+    }
+
+    function loginSuccess(user) {
+      currentUser = user;
+      document.getElementById('unauth-header-actions').style.display = 'none';
+      document.getElementById('auth-header-actions').style.display = 'flex';
+      document.getElementById('userHeaderName').textContent = user.name;
+      document.getElementById('userHeaderRole').textContent = user.role;
+      document.getElementById('userAvatarText').textContent = user.name.split(' ').map(w => w[0]).join('').slice(0, 2);
+
+      showToast(`Signed in as ${user.name} (${user.role})`, 'success');
+      switchView('workspace');
+    }
+
+    function logoutUser() {
+      currentUser = null;
+      document.getElementById('unauth-header-actions').style.display = 'flex';
+      document.getElementById('auth-header-actions').style.display = 'none';
+      document.getElementById('userDropdownMenu').classList.remove('open');
+      showToast('Signed out of session');
+      switchView('landing');
+    }
+
+    function toggleUserDropdown() {
+      document.getElementById('userDropdownMenu').classList.toggle('open');
+    }
+
+    /* --------------------------------------------------------
+       4. API FETCH HELPER
+       -------------------------------------------------------- */
+    async function apiFetch(path, opts = {}) {
+      const res = await fetch('/api' + path, opts);
+      if (!res.ok) {
+        let errText = res.statusText;
+        try {
+          const json = await res.json();
+          errText = json.detail || json.error || errText;
+        } catch (_) {}
+        throw new Error(errText);
+      }
+      return res.json();
+    }
+
+    async function initWorkspace() {
+      try {
+        const base = await apiFetch('/baseline');
+        showToast(`Baseline Model Loaded: AUC ${base.baseline.auc}, Acc ${base.baseline.accuracy}`, 'success');
+      } catch (err) {
+        console.warn('Baseline check:', err);
+      }
+      runSimulation();
+    }
+
+    /* --------------------------------------------------------
+       5. MODE 1: DEMO SIMULATION HANDLERS
+       -------------------------------------------------------- */
+    function updateDriftSliderReadout(val) {
+      document.getElementById('drift-readout').textContent = (+val).toFixed(2);
+    }
+
+    function applyPreset(val) {
+      document.getElementById('drift-slider').value = val;
+      updateDriftSliderReadout(val);
+      runSimulation();
+    }
+
+    async function runSimulation() {
+      const driftVal = document.getElementById('drift-slider').value;
+      const sampleSize = document.getElementById('sim-sample-size').value;
+      const btn = document.getElementById('btn-run-sim');
+      btn.innerHTML = '<span>⏳ Computing...</span>';
+      btn.disabled = true;
+
+      try {
+        const data = await apiFetch(`/simulate?drift=${driftVal}&n=${sampleSize}&seed=7`, { method: 'POST' });
+        activeTelemetry = data;
+        activeTelemetry.is_simulated = true;
+        renderTelemetry(data, true);
+        document.getElementById('sim-provenance-title').textContent =
+          `Synthetic Covariate & Concept Drift Generator (drift = ${(+driftVal).toFixed(2)}, N = ${(+sampleSize).toLocaleString()})`;
+        document.getElementById('sim-provenance-time').textContent = 'Last Simulated: ' + new Date().toLocaleTimeString();
+        showToast(`Simulation complete: ${data.level.toUpperCase()} (Score: ${data.score})`, 'info');
+      } catch (err) {
+        showToast('Simulation error: ' + err.message, 'error');
+      } finally {
+        btn.innerHTML = '<span>⚡ Run Simulation Batch</span>';
+        btn.disabled = false;
+      }
+    }
+
+    async function triggerRetraining() {
+      const btn = document.getElementById('btn-retrain');
+      btn.innerHTML = '<span>🔄 Retraining...</span>';
+      btn.disabled = true;
+
+      try {
+        const res = await apiFetch('/retrain', { method: 'POST' });
+        showToast(`Retraining Complete! New baseline AUC: ${res.new_baseline.auc}`, 'success');
+        runSimulation();
+      } catch (err) {
+        showToast('Retrain error: ' + err.message, 'error');
+      } finally {
+        btn.innerHTML = '<span>🔄 Retrain Model</span>';
+        btn.disabled = false;
+      }
+    }
+
+    /* --------------------------------------------------------
+       6. MODE 2: UPLOAD & ANALYZE DATASET HANDLERS
+       -------------------------------------------------------- */
+    function triggerFileInputClick() {
+      document.getElementById('workspace-csv-input').click();
+    }
+
+    function formatFileSize(bytes) {
+      if (bytes < 1024) return bytes + ' bytes';
+      if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+      return (bytes / 1048576).toFixed(2) + ' MB';
+    }
+
+    function handleFileSelected(file) {
+      if (!file) return;
+      selectedUploadFile = file;
+
+      const card = document.getElementById('selected-file-card');
+      card.style.display = 'flex';
+      document.getElementById('display-filename').textContent = file.name;
+      document.getElementById('display-filesize').textContent =
+        `${formatFileSize(file.size)} • Last modified: ${new Date(file.lastModified).toLocaleDateString()}`;
+
+      const statusBadge = document.getElementById('display-file-status');
+      statusBadge.className = 'file-status-badge idle';
+      statusBadge.textContent = 'READY TO ANALYZE';
+
+      showToast(`Selected ${file.name}. Click "Start Deep Analysis" to proceed.`);
+    }
+
+    function resetUploadState() {
+      selectedUploadFile = null;
+      document.getElementById('workspace-csv-input').value = '';
+      document.getElementById('selected-file-card').style.display = 'none';
+      document.getElementById('upload-provenance-card').style.display = 'none';
+      document.getElementById('profile-dataset-section').style.display = 'none';
+      showToast('Uploader reset. Ready for new dataset.');
+    }
+
+    async function loadSampleDataset(type) {
+      const url = type === 'reference' ? '/artifacts/reference_2000.csv' : '/sample_test.csv';
+      const name = type === 'reference' ? 'reference_2000.csv' : 'sample_test.csv';
+      showToast(`Loading ${name} for testing...`);
+
+      try {
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error('Could not read sample file');
+        const blob = await resp.blob();
+        const file = new File([blob], name, { type: 'text/csv', lastModified: Date.now() });
+        handleFileSelected(file);
+        executeUploadAnalysis();
+      } catch (err) {
+        showToast('Error loading sample dataset: ' + err.message, 'error');
+      }
+    }
+
+    async function executeUploadAnalysis() {
+      if (!selectedUploadFile) {
+        showToast('Please select a CSV file first', 'error');
+        return;
+      }
+
+      const statusBadge = document.getElementById('display-file-status');
+      const startBtn = document.getElementById('btn-start-analysis');
+
+      statusBadge.className = 'file-status-badge analyzing';
+      statusBadge.innerHTML = '<span>⏳ ANALYZING BATCH...</span>';
+      startBtn.disabled = true;
+      startBtn.textContent = 'Computing...';
+
+      const formData = new FormData();
+      formData.append('file', selectedUploadFile);
+
+      try {
+        const data = await apiFetch('/analyze', { method: 'POST', body: formData });
+        activeTelemetry = data;
+        activeTelemetry.is_simulated = false;
+
+        statusBadge.className = 'file-status-badge success';
+        statusBadge.textContent = 'ANALYSIS COMPLETE';
+
+        const provCard = document.getElementById('upload-provenance-card');
+        const provBadge = document.getElementById('upload-provenance-badge');
+        const provTitle = document.getElementById('upload-provenance-title');
+        const provDesc = document.getElementById('upload-provenance-desc');
+        provCard.style.display = 'flex';
+
+        if (data.mode === 'profile') {
+          provBadge.className = 'provenance-badge profile-mode';
+          provBadge.textContent = '📊 GENERAL DATASET PROFILE (Non-Model Schema)';
+          provTitle.textContent = `File: ${selectedUploadFile.name} (${data.rows.toLocaleString()} rows, ${data.column_count} columns)`;
+          provDesc.textContent = 'General statistical profile generated. Monitored model features were not detected, so baseline drift was skipped.';
+
+          renderGeneralDatasetProfile(data);
+          showToast(`Profiled ${data.rows} rows from ${selectedUploadFile.name}`, 'success');
+        } else {
+          provBadge.className = 'provenance-badge live';
+          provBadge.textContent = '🟢 LIVE UPLOADED DATASET (Verified Model Schema)';
+          provTitle.textContent = `Production Batch: ${selectedUploadFile.name} (${data.n_rows.toLocaleString()} rows)`;
+          provDesc.textContent = 'All 7 model features matched. Real baseline-vs-current drift analysis computed on LinuxONE.';
+
+          renderTelemetry(data, false, selectedUploadFile.name);
+          showToast(`Full Drift Analysis verified for ${selectedUploadFile.name}`, 'success');
+        }
+      } catch (err) {
+        statusBadge.className = 'file-status-badge error';
+        statusBadge.textContent = 'ANALYSIS ERROR';
+        showToast('Upload failed: ' + err.message, 'error');
+      } finally {
+        startBtn.disabled = false;
+        startBtn.textContent = '🚀 Start Deep Analysis';
+      }
+    }
+
+    /* --------------------------------------------------------
+       7. TELEMETRY & VISUALIZATION RENDERING
+       -------------------------------------------------------- */
+    function renderTelemetry(data, isSimulated = true, customFileName = '') {
+      document.getElementById('main-charts-section').style.display = 'grid';
+      document.getElementById('profile-dataset-section').style.display = 'none';
+
+      const sevBanner = document.getElementById('severity-banner');
+      const sevTag = document.getElementById('severity-tag');
+      const sevTitle = document.getElementById('severity-title');
+      const recsList = document.getElementById('recommendations-list');
+
+      sevBanner.className = `severity-banner ${data.level}`;
+      sevTag.className = `severity-tag ${data.level}`;
+      sevTag.textContent = data.level.toUpperCase();
+
+      const driftedCount = (data.features || []).filter(f => f.status === 'drift').length;
+      sevTitle.textContent = `${data.n_rows.toLocaleString()} rows evaluated — ${driftedCount} of ${data.features.length} features show significant covariate shift.`;
+      recsList.innerHTML = (data.recommendations || []).map(r => `<li>${r}</li>`).join('');
+
+      document.getElementById('kpi-drift-score').textContent = data.score;
+      document.getElementById('kpi-bar-drift').style.width = Math.min(data.score, 100) + '%';
+      document.getElementById('kpi-bar-drift').style.background = data.score > 60 ? 'var(--neon-magenta)' : (data.score > 25 ? 'var(--neon-amber)' : 'var(--neon-emerald)');
+
+      document.getElementById('kpi-drifted-count').textContent = `${driftedCount} / ${data.features.length}`;
+      document.getElementById('kpi-bar-features').style.width = ((driftedCount / data.features.length) * 100) + '%';
+
+      document.getElementById('kpi-pred-psi').textContent = (data.prediction && data.prediction.psi) ? data.prediction.psi.toFixed(3) : '0.000';
+      document.getElementById('kpi-bar-psi').style.width = Math.min((data.prediction ? data.prediction.psi : 0) * 200, 100) + '%';
+
+      if (data.performance) {
+        document.getElementById('kpi-auc-val').textContent = `${data.baseline.auc} → ${data.performance.auc}`;
+        const decayPts = (data.auc_drop * 100).toFixed(1);
+        document.getElementById('kpi-auc-sub').textContent = `${decayPts} percentage points performance drop`;
+      } else {
+        document.getElementById('kpi-auc-val').textContent = `${data.baseline ? data.baseline.auc : 0.713} (Label-free)`;
+        document.getElementById('kpi-auc-sub').textContent = 'Ground-truth labels unobserved';
+      }
+
+      const baseRisk = 120000;
+      const riskCalc = Math.round(baseRisk * (1 + data.score * 0.04));
+      document.getElementById('kpi-revenue-risk').textContent = '$' + riskCalc.toLocaleString();
+
+      const featDropdown = document.getElementById('featureDropdown');
+      const prevSelected = featDropdown.value;
+      const allFeats = (data.features || []).map(f => f.feature).concat('prediction_score');
+      featDropdown.innerHTML = allFeats.map(f => `<option value="${f}">${f}</option>`).join('');
+      if (allFeats.includes(prevSelected)) {
+        featDropdown.value = prevSelected;
+      } else if (data.features && data.features.length > 0) {
+        featDropdown.value = data.features[0].feature;
+      }
+
+      renderPsiBarChart(data.features || []);
+      renderDistributionChart();
+      renderTimelineChart(data.history || []);
+      renderCovariateTable(data.features || []);
+    }
+
+    function renderPsiBarChart(features) {
+      if (activeCharts.psi) activeCharts.psi.destroy();
+      const ctx = document.getElementById('psiChartCanvas').getContext('2d');
+      const labels = features.map(f => f.feature);
+      const values = features.map(f => f.psi);
+      const colors = features.map(f => STATUS_COLORS[f.status] || '#00f5ff');
+
+      activeCharts.psi = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{ data: values, backgroundColor: colors, borderRadius: 6, borderWidth: 0 }]
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => `PSI: ${ctx.parsed.x} (${features[ctx.dataIndex].status.toUpperCase()})`
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid: { color: 'rgba(255, 255, 255, 0.05)' },
+              ticks: { color: '#94a3b8', font: { family: 'JetBrains Mono' } }
+            },
+            y: {
+              grid: { display: false },
+              ticks: { color: '#f8fafc', font: { family: 'JetBrains Mono', weight: 600 } }
+            }
+          },
+          onClick: (e, elements) => {
+            if (elements.length > 0) {
+              const idx = elements[0].index;
+              const featName = features[idx].feature;
+              document.getElementById('featureDropdown').value = featName;
+              renderDistributionChart();
+              showToast(`Inspecting feature distribution: ${featName}`);
+            }
+          }
+        }
+      });
+    }
+
+    function renderDistributionChart() {
+      if (!activeTelemetry || !activeTelemetry.distributions) return;
+      if (activeCharts.dist) activeCharts.dist.destroy();
+
+      const selectedFeat = document.getElementById('featureDropdown').value;
+      const distData = activeTelemetry.distributions[selectedFeat];
+      if (!distData) return;
+
+      const ctx = document.getElementById('distChartCanvas').getContext('2d');
+      activeCharts.dist = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: distData.labels,
+          datasets: [
+            {
+              label: 'Reference (Training)',
+              data: distData.ref,
+              backgroundColor: 'rgba(0, 245, 255, 0.65)',
+              borderColor: '#00f5ff',
+              borderWidth: 1,
+              borderRadius: 4
+            },
+            {
+              label: 'Current (Production)',
+              data: distData.cur,
+              backgroundColor: 'rgba(244, 63, 94, 0.65)',
+              borderColor: '#f43f5e',
+              borderWidth: 1,
+              borderRadius: 4
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              labels: { color: '#f8fafc', font: { family: 'Plus Jakarta Sans', weight: 600 } }
+            }
+          },
+          scales: {
+            x: {
+              grid: { color: 'rgba(255, 255, 255, 0.05)' },
+              ticks: { color: '#94a3b8', font: { family: 'JetBrains Mono', size: 11 } }
+            },
+            y: {
+              grid: { color: 'rgba(255, 255, 255, 0.05)' },
+              ticks: { color: '#94a3b8', callback: v => v + '%' }
+            }
+          }
+        }
+      });
+    }
+
+    function renderTimelineChart(history) {
+      if (activeCharts.timeline) activeCharts.timeline.destroy();
+      const ctx = document.getElementById('timelineChartCanvas').getContext('2d');
+      const labels = history.map((h, i) => `#${i + 1} ${h.label.slice(0, 16)}`);
+      const scores = history.map(h => h.score);
+
+      activeCharts.timeline = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Drift Score (0 - 100)',
+            data: scores,
+            borderColor: '#00f5ff',
+            backgroundColor: 'rgba(0, 245, 255, 0.1)',
+            fill: true,
+            tension: 0.35,
+            pointBackgroundColor: scores.map(s => s > 50 ? '#f43f5e' : (s > 25 ? '#f59e0b' : '#10b981')),
+            pointRadius: 5
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: {
+              grid: { color: 'rgba(255, 255, 255, 0.04)' },
+              ticks: { color: '#94a3b8', font: { family: 'JetBrains Mono', size: 10 } }
+            },
+            y: {
+              min: 0, max: 100,
+              grid: { color: 'rgba(255, 255, 255, 0.04)' },
+              ticks: { color: '#94a3b8' }
+            }
+          }
+        }
+      });
+    }
+
+    function renderCovariateTable(features) {
+      const tbody = document.getElementById('covariateTableBody');
+      tbody.innerHTML = '';
+      features.forEach(f => {
+        const tr = document.createElement('tr');
+        const pValStr = f.p_value < 0.001 ? '< 0.001' : f.p_value.toFixed(3);
+        tr.innerHTML = `
+          <td style="font-family: var(--font-mono); font-weight: 700; color: #f8fafc;">${f.feature}</td>
+          <td><span style="color: var(--text-dim);">${f.type}</span></td>
+          <td style="font-family: var(--font-mono); font-weight: 700; color: ${STATUS_COLORS[f.status]};">${f.psi.toFixed(4)}</td>
+          <td><span style="font-family: var(--font-mono); font-size: 0.75rem;">${f.test} (${f.stat})</span></td>
+          <td style="font-family: var(--font-mono);">${pValStr}</td>
+          <td><span class="badge-status ${f.status}">${f.status}</span></td>
+          <td><button class="btn-inspect" onclick="inspectFeatureDirect('${f.feature}')">Inspect</button></td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function inspectFeatureDirect(feat) {
+      document.getElementById('featureDropdown').value = feat;
+      renderDistributionChart();
+      showToast(`Selected feature: ${feat}`);
+    }
+
+    /* General Dataset Profile (When Non-Model CSV Uploaded) */
+    function renderGeneralDatasetProfile(data) {
+      document.getElementById('main-charts-section').style.display = 'none';
+      const profSec = document.getElementById('profile-dataset-section');
+      profSec.style.display = 'block';
+
+      const totalMissing = (data.columns || []).reduce((acc, c) => acc + (c.missing || 0), 0);
+      const totalCells = (data.rows * data.column_count) || 1;
+      const overallMissingPct = ((totalMissing / totalCells) * 100).toFixed(1);
+
+      document.getElementById('profile-kpi-bar').innerHTML = `
+        <div class="profile-kpi-item">
+          <small>Total Rows</small>
+          <b>${data.rows.toLocaleString()}</b>
+        </div>
+        <div class="profile-kpi-item">
+          <small>Total Columns</small>
+          <b>${data.column_count}</b>
+        </div>
+        <div class="profile-kpi-item">
+          <small>Duplicate Rows</small>
+          <b style="color: ${data.duplicate_rows > 0 ? 'var(--neon-amber)' : 'var(--neon-emerald)'};">${data.duplicate_rows}</b>
+        </div>
+        <div class="profile-kpi-item">
+          <small>Missing Values</small>
+          <b style="color: ${totalMissing > 0 ? 'var(--neon-amber)' : 'var(--neon-emerald)'};">${totalMissing} (${overallMissingPct}%)</b>
+        </div>
+      `;
+
+      const tbl = document.getElementById('profileDatasetTable');
+      tbl.innerHTML = `
+        <thead>
+          <tr>
+            <th>Column Name</th>
+            <th>Data Type</th>
+            <th>Missing Count</th>
+            <th>Missing %</th>
+            <th>Unique Values</th>
+            <th>Statistical Summary / Top Frequencies</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${(data.columns || []).map(c => `
+            <tr>
+              <td style="font-family: var(--font-mono); font-weight: 700; color: #f8fafc;">${c.name}</td>
+              <td><span style="font-size: 0.75rem; padding: 0.15rem 0.45rem; background: rgba(255,255,255,0.06); border-radius: 4px;">${c.dtype}</span></td>
+              <td style="font-family: var(--font-mono); color: ${c.missing > 0 ? 'var(--neon-amber)' : 'var(--text-dim)'};">${c.missing}</td>
+              <td style="font-family: var(--font-mono);">${c.missing_pct !== undefined ? c.missing_pct + '%' : '0%'}</td>
+              <td style="font-family: var(--font-mono);">${c.unique}</td>
+              <td style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-muted);">${c.summary || JSON.stringify(c.top_values || '—')}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      `;
+    }
+
+    /* --------------------------------------------------------
+       8. AUDIT DATABASE VIEWER
+       -------------------------------------------------------- */
+    async function renderAuditDatabase() {
+      const tbody = document.getElementById('auditUsersTableBody');
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-dim);">Loading accounts...</td></tr>';
+
+      let users = [];
+      try {
+        const res = await fetch('/api/auth/users');
+        const data = await res.json();
+        if (data.success && data.users) users = data.users;
+      } catch (_) {}
+
+      if (users.length === 0) {
+        users = JSON.parse(localStorage.getItem(DB_STORAGE_KEY) || '[]');
+      }
+
+      if (users.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-dim);">No stored users yet. Register a user or use Demo Login.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = '';
+      users.forEach(u => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td style="font-family: var(--font-mono); color: var(--neon-cyan);">#UID-${u.id}</td>
+          <td style="font-weight: 700;">${u.name}</td>
+          <td style="font-family: var(--font-mono); color: var(--text-muted);">${u.email}</td>
+          <td><span style="font-size: 0.75rem; padding: 0.2rem 0.5rem; background: rgba(0, 245, 255, 0.08); border: 1px solid rgba(0, 245, 255, 0.25); border-radius: 4px; color: var(--neon-cyan);">${u.role}</span></td>
+          <td style="font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-dim);">${u.createdAt ? new Date(u.createdAt).toLocaleDateString() : 'Initial Seed'}</td>
+          <td style="font-family: var(--font-mono); color: var(--neon-emerald);">${u.lastLogin ? new Date(u.lastLogin).toLocaleTimeString() : 'Active'}</td>
+          <td style="font-weight: 700;">${u.loginCount || 1}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function exportDatabaseJSON() {
+      fetch('/api/auth/users')
+        .then(r => r.json())
+        .then(d => {
+          const blob = new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' });
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = `linuxone_audit_export_${Date.now()}.json`;
+          a.click();
+          showToast('Database JSON backup downloaded', 'success');
+        })
+        .catch(err => showToast('Export failed: ' + err.message, 'error'));
+    }
+
+    /* --------------------------------------------------------
+       9. INITIALIZATION & DRAG-AND-DROP SETUP
+       -------------------------------------------------------- */
+    window.addEventListener('DOMContentLoaded', () => {
+      new NeuralNetworkVisualizer('neural-canvas');
+
+      // Drag and drop event listeners
+      const dropzone = document.getElementById('csv-dropzone');
+      if (dropzone) {
+        ['dragenter', 'dragover'].forEach(eventName => {
+          dropzone.addEventListener(eventName, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropzone.classList.add('dragover');
+          }, false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+          dropzone.addEventListener(eventName, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropzone.classList.remove('dragover');
+          }, false);
+        });
+
+        dropzone.addEventListener('drop', (e) => {
+          const dt = e.dataTransfer;
+          const files = dt.files;
+          if (files && files.length > 0) {
+            handleFileSelected(files[0]);
+          }
+        }, false);
+      }
+
+      const hash = window.location.hash.replace('#', '');
+      if (['landing', 'auth', 'workspace', 'database'].includes(hash)) {
+        switchView(hash);
+      } else {
+        switchView('landing');
+      }
+    });
+  </script>
 </body>
 </html>

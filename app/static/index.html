@@ -1,0 +1,1922 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Model Drift Detective | Customer Churn Degradation Monitor</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- FontAwesome CDN -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Plus Jakarta Sans', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+            },
+            dark: {
+              900: '#0b0f19',
+              850: '#0f172a',
+              800: '#1e293b',
+              700: '#334155',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    body {
+      background-color: #0b0f19;
+      color: #f1f5f9;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+    .glass-card {
+      background: rgba(30, 41, 59, 0.7);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .glass-nav {
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.5);
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 9999px;
+    }
+    .glow-healthy {
+      box-shadow: 0 0 20px rgba(16, 185, 129, 0.25);
+    }
+    .glow-warning {
+      box-shadow: 0 0 20px rgba(245, 158, 11, 0.25);
+    }
+    .glow-danger {
+      box-shadow: 0 0 25px rgba(239, 68, 68, 0.35);
+    }
+    @keyframes pulse-ring {
+      0% { transform: scale(0.95); opacity: 0.8; }
+      50% { transform: scale(1.15); opacity: 0.4; }
+      100% { transform: scale(0.95); opacity: 0.8; }
+    }
+    .pulse-indicator {
+      animation: pulse-ring 2s infinite ease-in-out;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col antialiased selection:bg-indigo-500 selection:text-white">
+
+  <!-- ================= TOP NAVIGATION ================= -->
+  <header class="glass-nav sticky top-0 z-40 px-6 py-3.5">
+    <div class="max-w-7xl mx-auto flex items-center justify-between">
+      <!-- Logo & Title -->
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-cyan-400 flex items-center justify-center shadow-lg shadow-indigo-500/30">
+          <i class="fa-solid fa-radar text-white text-lg"></i>
+        </div>
+        <div>
+          <div class="flex items-center space-x-2">
+            <h1 class="text-lg font-bold tracking-tight text-white flex items-center gap-2">
+              AI Model Drift Detective
+            </h1>
+            <span id="nav-model-version" class="text-xs px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-mono">
+              v1.0.0
+            </span>
+          </div>
+          <p class="text-xs text-slate-400">Customer Churn Classifier • Silent Degradation Monitor</p>
+        </div>
+      </div>
+
+      <!-- Live Health Pill -->
+      <div class="hidden md:flex items-center space-x-3">
+        <div id="live-status-pill" class="flex items-center space-x-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-semibold">
+          <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 pulse-indicator"></span>
+          <span id="live-status-text">HEALTHY (No Drift)</span>
+        </div>
+      </div>
+
+      <!-- User Auth Section -->
+      <div class="flex items-center space-x-3">
+        <div id="user-logged-in-container" class="hidden flex items-center space-x-3">
+          <div class="text-right hidden sm:block">
+            <div id="nav-username" class="text-sm font-semibold text-slate-200">admin</div>
+            <div id="nav-user-role" class="text-[11px] text-indigo-400 uppercase tracking-wider font-mono">ADMINISTRATOR</div>
+          </div>
+          <div class="w-9 h-9 rounded-full bg-indigo-600/40 border border-indigo-500/40 flex items-center justify-center text-sm font-bold text-indigo-200">
+            <i class="fa-solid fa-user-astronaut"></i>
+          </div>
+          <button onclick="handleLogout()" title="Sign Out" class="p-2 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors">
+            <i class="fa-solid fa-arrow-right-from-bracket"></i>
+          </button>
+        </div>
+
+        <a href="/static/ai-model-drift-detective.zip" download class="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 shadow-md transition-all flex items-center gap-1.5" title="Download Complete Project ZIP">
+          <i class="fa-solid fa-file-zipper text-emerald-400"></i>
+          <span class="hidden sm:inline">Download ZIP</span>
+        </a>
+
+        <button id="sign-in-btn" onclick="openAuthModal('login')" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md shadow-indigo-600/30 transition-all flex items-center gap-2">
+          <i class="fa-solid fa-right-to-bracket"></i>
+          <span>Sign In / Demo</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ================= SUB-NAV TABS ================= -->
+  <nav class="border-b border-slate-800 bg-slate-900/60 px-6">
+    <div class="max-w-7xl mx-auto flex space-x-1 sm:space-x-4 overflow-x-auto custom-scrollbar">
+      <button onclick="switchTab('dashboard')" id="tab-btn-dashboard" class="tab-btn active px-4 py-3 text-xs sm:text-sm font-medium border-b-2 border-indigo-500 text-white flex items-center gap-2 whitespace-nowrap">
+        <i class="fa-solid fa-gauge-high"></i> Dashboard
+      </button>
+      <button onclick="switchTab('detective')" id="tab-btn-detective" class="tab-btn px-4 py-3 text-xs sm:text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-2 whitespace-nowrap">
+        <i class="fa-solid fa-magnifying-glass-chart"></i> Feature Inspector
+      </button>
+      <button onclick="switchTab('simulator')" id="tab-btn-simulator" class="tab-btn px-4 py-3 text-xs sm:text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-2 whitespace-nowrap">
+        <i class="fa-solid fa-bolt-lightning text-amber-400"></i> Live Drift Simulator
+      </button>
+      <button onclick="switchTab('alerts')" id="tab-btn-alerts" class="tab-btn px-4 py-3 text-xs sm:text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-2 whitespace-nowrap relative">
+        <i class="fa-solid fa-triangle-exclamation"></i> Incidents & Alerts
+        <span id="alerts-badge" class="hidden ml-1 px-1.5 py-0.2 rounded-full bg-rose-500 text-white text-[10px] font-bold">0</span>
+      </button>
+      <button onclick="switchTab('database')" id="tab-btn-database" class="tab-btn px-4 py-3 text-xs sm:text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-2 whitespace-nowrap">
+        <i class="fa-solid fa-database text-cyan-400"></i> SQLite Records
+      </button>
+      <button onclick="switchTab('upload')" id="tab-btn-upload" class="tab-btn px-4 py-3 text-xs sm:text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-2 whitespace-nowrap">
+        <i class="fa-solid fa-cloud-arrow-up text-emerald-400"></i> Upload & Analyze Dataset
+      </button>
+    </div>
+  </nav>
+
+  <!-- ================= MAIN CONTENT ================= -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 space-y-6">
+
+    <!-- TAB 1: EXECUTIVE DASHBOARD -->
+    <div id="tab-dashboard" class="space-y-6">
+      <!-- Status Banner -->
+      <div id="hero-banner" class="glass-card rounded-2xl p-5 sm:p-6 border border-emerald-500/30 bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 relative overflow-hidden">
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div class="space-y-1 z-10">
+            <div class="flex items-center space-x-2">
+              <span id="hero-status-tag" class="text-xs uppercase font-bold tracking-widest px-2.5 py-1 rounded-md bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-mono">
+                MODEL IN EQUILIBRIUM
+              </span>
+              <span class="text-xs text-slate-400">Target Model: Customer Churn Classifier (2,000 Trained Samples)</span>
+            </div>
+            <h2 id="hero-headline" class="text-2xl sm:text-3xl font-extrabold text-white">
+              AI Classifier Operating Within Normal Drift Tolerances
+            </h2>
+            <p id="hero-summary" class="text-sm text-slate-300 max-w-3xl">
+              Real-time monitoring across feature distributions (tenure, monthly_charges, support_calls, data_usage_gb, contract, internet_service, payment_method). Kolmogorov-Smirnov test and Population Stability Index (PSI) are actively detecting covariate drift and silent degradation.
+            </p>
+          </div>
+          <div class="flex items-center gap-3 z-10 shrink-0">
+            <button onclick="seedDemoData()" class="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold flex items-center gap-2 transition-all">
+              <i class="fa-solid fa-clock-rotate-left"></i>
+              <span>Seed Demo Batches</span>
+            </button>
+            <button onclick="switchTab('simulator')" class="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-2 shadow-lg shadow-indigo-600/30 transition-all">
+              <i class="fa-solid fa-play"></i>
+              <span>Inject Drift Test</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- KPI Cards Grid -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- Metric 1: Drift Score (PSI) -->
+        <div class="glass-card rounded-xl p-5 space-y-2 border border-slate-800">
+          <div class="flex items-center justify-between text-slate-400">
+            <span class="text-xs font-medium uppercase tracking-wider">Overall Drift Index (PSI)</span>
+            <div class="w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-400 flex items-center justify-center text-sm">
+              <i class="fa-solid fa-chart-line"></i>
+            </div>
+          </div>
+          <div class="flex items-baseline space-x-2">
+            <span id="metric-psi" class="text-3xl font-bold font-mono text-white">0.042</span>
+            <span id="metric-psi-badge" class="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">Stable</span>
+          </div>
+          <p class="text-[11px] text-slate-400">Threshold: Safe &lt; 0.10 | Alert &gt; 0.20</p>
+        </div>
+
+        <!-- Metric 2: Model Accuracy -->
+        <div class="glass-card rounded-xl p-5 space-y-2 border border-slate-800">
+          <div class="flex items-center justify-between text-slate-400">
+            <span class="text-xs font-medium uppercase tracking-wider">Model Accuracy</span>
+            <div class="w-8 h-8 rounded-lg bg-cyan-500/10 text-cyan-400 flex items-center justify-center text-sm">
+              <i class="fa-solid fa-bullseye"></i>
+            </div>
+          </div>
+          <div class="flex items-baseline space-x-2">
+            <span id="metric-accuracy" class="text-3xl font-bold font-mono text-white">68.5%</span>
+            <span id="metric-acc-drop" class="text-xs font-semibold text-slate-400">Base: 66.6%</span>
+          </div>
+          <p id="metric-acc-delta" class="text-[11px] text-emerald-400">Performance is nominal</p>
+        </div>
+
+        <!-- Metric 3: Active Incidents -->
+        <div class="glass-card rounded-xl p-5 space-y-2 border border-slate-800">
+          <div class="flex items-center justify-between text-slate-400">
+            <span class="text-xs font-medium uppercase tracking-wider">Active Drift Alerts</span>
+            <div class="w-8 h-8 rounded-lg bg-rose-500/10 text-rose-400 flex items-center justify-center text-sm">
+              <i class="fa-solid fa-bell"></i>
+            </div>
+          </div>
+          <div class="flex items-baseline space-x-2">
+            <span id="metric-alerts-count" class="text-3xl font-bold font-mono text-white">0</span>
+            <span id="metric-alerts-status" class="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">All Clear</span>
+          </div>
+          <p class="text-[11px] text-slate-400">Requires triage or retraining</p>
+        </div>
+
+        <!-- Metric 4: Inferences Stored in SQLite -->
+        <div class="glass-card rounded-xl p-5 space-y-2 border border-slate-800">
+          <div class="flex items-center justify-between text-slate-400">
+            <span class="text-xs font-medium uppercase tracking-wider">Monitored Customers</span>
+            <div class="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-400 flex items-center justify-center text-sm">
+              <i class="fa-solid fa-users"></i>
+            </div>
+          </div>
+          <div class="flex items-baseline space-x-2">
+            <span id="metric-inferences" class="text-3xl font-bold font-mono text-white">0</span>
+            <span id="metric-batches" class="text-xs text-slate-400 font-mono">0 Batches</span>
+          </div>
+          <p class="text-[11px] text-slate-400">Saved in SQLite database</p>
+        </div>
+      </div>
+
+      <!-- Charts Row -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Chart 1: Drift Score & Accuracy Over Time -->
+        <div class="glass-card rounded-xl p-5 border border-slate-800 space-y-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <h3 class="text-base font-bold text-white flex items-center gap-2">
+                <i class="fa-solid fa-chart-area text-indigo-400"></i>
+                Drift Index & Accuracy Trend
+              </h3>
+              <p class="text-xs text-slate-400">PSI score and live accuracy across sequential production batches</p>
+            </div>
+            <span class="text-[11px] font-mono px-2 py-1 bg-slate-800 rounded text-slate-300">Batches</span>
+          </div>
+          <div class="h-64 relative">
+            <canvas id="trendChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Chart 2: Output Prediction Probability Distribution -->
+        <div class="glass-card rounded-xl p-5 border border-slate-800 space-y-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <h3 class="text-base font-bold text-white flex items-center gap-2">
+                <i class="fa-solid fa-chart-column text-cyan-400"></i>
+                Prediction Drift (Output Churn Probabilities)
+              </h3>
+              <p class="text-xs text-slate-400">Baseline distribution vs current production batch</p>
+            </div>
+            <span class="text-[11px] font-mono px-2 py-1 bg-slate-800 rounded text-slate-300">Probability Deciles</span>
+          </div>
+          <div class="h-64 relative">
+            <canvas id="predictionChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recent Batches & Quick Remediation Bar -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div class="lg:col-span-2 glass-card rounded-xl p-5 border border-slate-800 space-y-4">
+          <div class="flex items-center justify-between">
+            <h3 class="text-base font-bold text-white flex items-center gap-2">
+              <i class="fa-solid fa-layer-group text-indigo-400"></i>
+              Recent Monitored Production Batches
+            </h3>
+            <button onclick="loadDashboard()" class="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1">
+              <i class="fa-solid fa-rotate-right"></i> Refresh
+            </button>
+          </div>
+          <div class="overflow-x-auto custom-scrollbar">
+            <table class="w-full text-left text-xs">
+              <thead class="text-[11px] text-slate-400 uppercase bg-slate-900/50 border-b border-slate-800">
+                <tr>
+                  <th class="py-2.5 px-3">Batch Code</th>
+                  <th class="py-2.5 px-3">Scenario</th>
+                  <th class="py-2.5 px-3">Samples</th>
+                  <th class="py-2.5 px-3">Drift (PSI)</th>
+                  <th class="py-2.5 px-3">Accuracy</th>
+                  <th class="py-2.5 px-3">Status</th>
+                  <th class="py-2.5 px-3">Action</th>
+                </tr>
+              </thead>
+              <tbody id="recent-batches-tbody" class="divide-y divide-slate-800 font-mono text-slate-300">
+                <!-- Populated dynamically -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Model Specs & Retraining Quick Card -->
+        <div class="glass-card rounded-xl p-5 border border-slate-800 space-y-4 flex flex-col justify-between">
+          <div class="space-y-3">
+            <div class="flex items-center justify-between">
+              <h3 class="text-base font-bold text-white flex items-center gap-2">
+                <i class="fa-solid fa-microchip text-indigo-400"></i>
+                Active Model Specs
+              </h3>
+              <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300">ONLINE</span>
+            </div>
+            
+            <div class="space-y-2 text-xs">
+              <div class="flex justify-between py-1.5 border-b border-slate-800">
+                <span class="text-slate-400">Algorithm:</span>
+                <span class="font-mono text-slate-200">RandomForest</span>
+              </div>
+              <div class="flex justify-between py-1.5 border-b border-slate-800">
+                <span class="text-slate-400">Version:</span>
+                <span id="quick-model-version" class="font-mono text-indigo-400 font-semibold">v1.0.0</span>
+              </div>
+              <div class="flex justify-between py-1.5 border-b border-slate-800">
+                <span class="text-slate-400">Baseline Accuracy:</span>
+                <span id="quick-model-accuracy" class="font-mono text-slate-200">66.6%</span>
+              </div>
+              <div class="flex justify-between py-1.5 border-b border-slate-800">
+                <span class="text-slate-400">Baseline F1 Score:</span>
+                <span id="quick-model-f1" class="font-mono text-slate-200">0.384</span>
+              </div>
+              <div class="flex justify-between py-1.5 border-b border-slate-800">
+                <span class="text-slate-400">Baseline ROC-AUC:</span>
+                <span id="quick-model-auc" class="font-mono text-slate-200">0.682</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="pt-4 border-t border-slate-800 space-y-2">
+            <div class="text-[11px] text-slate-400">
+              When drift or degradation is detected, retrain the classifier to ingest the latest verified production stream.
+            </div>
+            <button onclick="triggerRetrain()" class="w-full py-2.5 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-semibold text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/30 transition-all">
+              <i class="fa-solid fa-arrows-rotate"></i>
+              <span>Retrain & Remediate Model</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 2: FEATURE DRIFT DETECTIVE -->
+    <div id="tab-detective" class="hidden space-y-6">
+      <div class="glass-card rounded-2xl p-5 border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h2 class="text-xl font-bold text-white flex items-center gap-2">
+            <i class="fa-solid fa-magnifying-glass-chart text-indigo-400"></i>
+            Feature Covariate Drift Inspector
+          </h2>
+          <p class="text-xs text-slate-400">
+            Statistical hypothesis tests (Two-Sample KS test) and Population Stability Index (PSI) calculated on user dataset features.
+          </p>
+        </div>
+        <div class="flex items-center gap-3">
+          <label class="text-xs text-slate-400">Inspect Feature:</label>
+          <select id="feature-select" onchange="updateFeatureChart()" class="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-3 py-2 font-mono focus:ring-1 focus:ring-indigo-500">
+            <option value="monthly_charges">monthly_charges (Numerical, $)</option>
+            <option value="tenure">tenure (Numerical, Months)</option>
+            <option value="support_calls">support_calls (Numerical, Count)</option>
+            <option value="data_usage_gb">data_usage_gb (Numerical, GB)</option>
+            <option value="contract">contract (Categorical)</option>
+            <option value="internet_service">internet_service (Categorical)</option>
+            <option value="payment_method">payment_method (Categorical)</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Feature Distribution Comparison Chart -->
+      <div class="glass-card rounded-xl p-5 border border-slate-800 space-y-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <h3 id="feature-chart-title" class="text-base font-bold text-white flex items-center gap-2">
+              Distribution Comparison: Monthly Charges
+            </h3>
+            <p id="feature-chart-subtitle" class="text-xs text-slate-400">Training Baseline (Expected) vs Current Production Inferences</p>
+          </div>
+          <div class="flex items-center gap-4 text-xs">
+            <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-indigo-500"></span> Baseline</div>
+            <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-amber-500"></span> Production</div>
+          </div>
+        </div>
+        <div class="h-72 relative">
+          <canvas id="featureDistChart"></canvas>
+        </div>
+      </div>
+
+      <!-- Feature Metrics Table -->
+      <div class="glass-card rounded-xl p-5 border border-slate-800 space-y-4">
+        <h3 class="text-base font-bold text-white flex items-center gap-2">
+          <i class="fa-solid fa-table-list text-indigo-400"></i>
+          Dataset Feature Drift Diagnostics Matrix
+        </h3>
+        <div class="overflow-x-auto custom-scrollbar">
+          <table class="w-full text-left text-xs">
+            <thead class="text-[11px] text-slate-400 uppercase bg-slate-900/60 border-b border-slate-800">
+              <tr>
+                <th class="py-3 px-3">Feature Name</th>
+                <th class="py-3 px-3">Type</th>
+                <th class="py-3 px-3">PSI Score</th>
+                <th class="py-3 px-3">KS Statistic</th>
+                <th class="py-3 px-3">p-value</th>
+                <th class="py-3 px-3">Baseline Mean</th>
+                <th class="py-3 px-3">Prod Mean</th>
+                <th class="py-3 px-3">Drift Status</th>
+              </tr>
+            </thead>
+            <tbody id="features-matrix-tbody" class="divide-y divide-slate-800 font-mono text-slate-300">
+              <!-- Populated dynamically -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: LIVE DRIFT SIMULATOR & PREDICTOR -->
+    <div id="tab-simulator" class="hidden space-y-6">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        <!-- Left: Batch Drift Scenario Injector (2 cols) -->
+        <div class="lg:col-span-2 glass-card rounded-xl p-5 border border-slate-800 space-y-5">
+          <div class="space-y-1">
+            <h2 class="text-xl font-bold text-white flex items-center gap-2">
+              <i class="fa-solid fa-bolt-lightning text-amber-400"></i>
+              Production Stream Drift Injector
+            </h2>
+            <p class="text-xs text-slate-400">
+              Trigger real-world MLOps degradation scenarios to test the Drift Detective's automated alerts and detection algorithms on customer churn data.
+            </p>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <!-- Scenario 1: Healthy -->
+            <label class="relative flex flex-col p-4 rounded-xl border-2 border-slate-700 bg-slate-900/60 cursor-pointer hover:border-emerald-500 transition-all scenario-card">
+              <input type="radio" name="scenario-radio" value="normal" checked class="absolute top-4 right-4 text-emerald-500">
+              <div class="flex items-center gap-2 text-emerald-400 font-bold text-sm mb-1">
+                <i class="fa-solid fa-circle-check"></i> Normal Production
+              </div>
+              <p class="text-xs text-slate-400">Standard customer stream. Distributions match baseline dataset. PSI &lt; 0.1.</p>
+            </label>
+
+            <!-- Scenario 2: Covariate Drift -->
+            <label class="relative flex flex-col p-4 rounded-xl border-2 border-slate-700 bg-slate-900/60 cursor-pointer hover:border-amber-500 transition-all scenario-card">
+              <input type="radio" name="scenario-radio" value="covariate_shift" class="absolute top-4 right-4 text-amber-500">
+              <div class="flex items-center gap-2 text-amber-400 font-bold text-sm mb-1">
+                <i class="fa-solid fa-arrows-split-up-and-left"></i> Covariate Shift
+              </div>
+              <p class="text-xs text-slate-400">Customer behavior shift: Support calls surge (mean moves from 2 to 6), data usage spikes, contract shifts to month-to-month.</p>
+            </label>
+
+            <!-- Scenario 3: Concept Drift -->
+            <label class="relative flex flex-col p-4 rounded-xl border-2 border-slate-700 bg-slate-900/60 cursor-pointer hover:border-rose-500 transition-all scenario-card">
+              <input type="radio" name="scenario-radio" value="concept_drift" class="absolute top-4 right-4 text-rose-400">
+              <div class="flex items-center gap-2 text-rose-400 font-bold text-sm mb-1">
+                <i class="fa-solid fa-skull-crossbones"></i> Concept Drift (Silent)
+              </div>
+              <p class="text-xs text-slate-400">Competitor promo targeting high-tenure & 2-year contracted loyal users. The feature-churn relationship breaks!</p>
+            </label>
+
+            <!-- Scenario 4: Severe Crisis -->
+            <label class="relative flex flex-col p-4 rounded-xl border-2 border-slate-700 bg-slate-900/60 cursor-pointer hover:border-purple-500 transition-all scenario-card">
+              <input type="radio" name="scenario-radio" value="severe_shock" class="absolute top-4 right-4 text-purple-400">
+              <div class="flex items-center gap-2 text-purple-400 font-bold text-sm mb-1">
+                <i class="fa-solid fa-burst"></i> Catastrophic Outage
+              </div>
+              <p class="text-xs text-slate-400">Service crisis: Support calls explode to 7-10, charges rise, churn spikes to 78%+ across all segments.</p>
+            </label>
+          </div>
+
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-2">
+            <div class="flex items-center gap-3">
+              <label class="text-xs text-slate-400 font-medium">Batch Sample Count:</label>
+              <input type="range" id="batch-sample-slider" min="50" max="300" step="25" value="120" oninput="document.getElementById('batch-sample-val').textContent = this.value" class="w-32 accent-indigo-500">
+              <span id="batch-sample-val" class="text-xs font-mono font-bold text-indigo-400">120</span>
+              <span class="text-xs text-slate-500">customers</span>
+            </div>
+
+            <button id="run-simulation-btn" onclick="executeBatchSimulation()" class="px-6 py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white font-bold text-xs shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 transition-all">
+              <i class="fa-solid fa-play"></i>
+              <span>Simulate & Analyze Batch</span>
+            </button>
+          </div>
+
+          <!-- Simulation Live Result Box -->
+          <div id="sim-result-box" class="hidden p-4 rounded-xl bg-slate-900/90 border border-slate-700 space-y-3 font-mono text-xs">
+            <!-- Filled dynamically -->
+          </div>
+        </div>
+
+        <!-- Right: Single Online Churn Predictor Form (1 col) -->
+        <div class="glass-card rounded-xl p-5 border border-slate-800 space-y-4">
+          <div class="space-y-1">
+            <h3 class="text-base font-bold text-white flex items-center gap-2">
+              <i class="fa-solid fa-user-check text-cyan-400"></i>
+              Live Customer Churn Predictor
+            </h3>
+            <p class="text-xs text-slate-400">Score individual customer profiles with dataset parameters</p>
+          </div>
+
+          <form id="single-predict-form" onsubmit="handleSinglePredict(event)" class="space-y-3 text-xs">
+            <div>
+              <label class="text-slate-400 block mb-1">Tenure (Months): <span id="val-tenure" class="text-indigo-400 font-mono font-bold">20.5</span></label>
+              <input type="range" id="input-tenure" min="1" max="72" step="0.5" value="20.5" oninput="document.getElementById('val-tenure').textContent = this.value" class="w-full accent-indigo-500">
+            </div>
+
+            <div>
+              <label class="text-slate-400 block mb-1">Monthly Charges ($): <span id="val-charges" class="text-indigo-400 font-mono font-bold">68.75</span></label>
+              <input type="range" id="input-charges" min="15" max="160" step="1" value="68.75" oninput="document.getElementById('val-charges').textContent = Number(this.value).toFixed(2)" class="w-full accent-indigo-500">
+            </div>
+
+            <div>
+              <label class="text-slate-400 block mb-1">Support Calls: <span id="val-support" class="text-indigo-400 font-mono font-bold">2</span></label>
+              <input type="range" id="input-support" min="0" max="12" step="1" value="2" oninput="document.getElementById('val-support').textContent = this.value" class="w-full accent-indigo-500">
+            </div>
+
+            <div>
+              <label class="text-slate-400 block mb-1">Data Usage (GB): <span id="val-data" class="text-indigo-400 font-mono font-bold">26.0</span></label>
+              <input type="range" id="input-data" min="2" max="180" step="1" value="26" oninput="document.getElementById('val-data').textContent = this.value" class="w-full accent-indigo-500">
+            </div>
+
+            <div>
+              <label class="text-slate-400 block mb-1">Contract Duration</label>
+              <select id="input-contract" class="w-full bg-slate-900 border border-slate-700 text-slate-200 rounded-lg p-2 font-mono">
+                <option value="month-to-month">month-to-month (High Risk)</option>
+                <option value="one-year">one-year</option>
+                <option value="two-year">two-year (Low Risk)</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="text-slate-400 block mb-1">Internet Service</label>
+              <select id="input-internet" class="w-full bg-slate-900 border border-slate-700 text-slate-200 rounded-lg p-2 font-mono">
+                <option value="fiber">fiber</option>
+                <option value="dsl">dsl</option>
+                <option value="none">none</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="text-slate-400 block mb-1">Payment Method</label>
+              <select id="input-payment" class="w-full bg-slate-900 border border-slate-700 text-slate-200 rounded-lg p-2 font-mono">
+                <option value="card">card</option>
+                <option value="bank">bank</option>
+                <option value="wallet">wallet</option>
+                <option value="cheque">cheque</option>
+              </select>
+            </div>
+
+            <button type="submit" class="w-full py-2.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-md shadow-cyan-600/30 transition-all">
+              <i class="fa-solid fa-calculator"></i>
+              <span>Predict Churn Probability</span>
+            </button>
+          </form>
+
+          <!-- Single Prediction Output -->
+          <div id="single-output" class="hidden p-3 rounded-lg bg-slate-900/80 border border-slate-700 space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="text-xs text-slate-400">Churn Probability:</span>
+              <span id="single-prob-val" class="text-lg font-bold font-mono text-white">--</span>
+            </div>
+            <div class="w-full bg-slate-800 rounded-full h-2.5 overflow-hidden">
+              <div id="single-prob-bar" class="bg-indigo-500 h-2.5 rounded-full" style="width: 50%"></div>
+            </div>
+            <div class="flex items-center justify-between text-xs">
+              <span id="single-risk-badge" class="px-2 py-0.5 rounded-full font-semibold">Low Risk</span>
+              <span id="single-pred-label" class="font-mono text-slate-300">Will Retain</span>
+            </div>
+            <div id="single-outliers-box" class="text-[11px] text-amber-400 font-mono pt-1 border-t border-slate-800"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 4: INCIDENTS & REMEDIATION -->
+    <div id="tab-alerts" class="hidden space-y-6">
+      <div class="glass-card rounded-2xl p-5 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 class="text-xl font-bold text-white flex items-center gap-2">
+            <i class="fa-solid fa-triangle-exclamation text-rose-400"></i>
+            Model Drift Incidents & Remediation Center
+          </h2>
+          <p class="text-xs text-slate-400">Automated triage for covariate drift anomalies, concept drift, and accuracy drops</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="loadAlerts('active')" class="px-3 py-1.5 rounded-lg bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs font-semibold hover:bg-rose-500/30">
+            Active Alerts
+          </button>
+          <button onclick="loadAlerts('all')" class="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300 border border-slate-700 text-xs font-semibold hover:bg-slate-700">
+            All Incidents
+          </button>
+          <button onclick="triggerRetrain()" class="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-emerald-600/30">
+            <i class="fa-solid fa-arrows-rotate"></i> Retrain Model
+          </button>
+        </div>
+      </div>
+
+      <!-- Alerts List Container -->
+      <div id="alerts-list-container" class="space-y-3">
+        <!-- Filled dynamically -->
+      </div>
+    </div>
+
+    <!-- TAB 5: SQLITE RECORDS & DATA WAREHOUSE EXPLORER -->
+    <div id="tab-database" class="hidden space-y-6">
+      <div class="glass-card rounded-2xl p-5 border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h2 class="text-xl font-bold text-white flex items-center gap-2">
+            <i class="fa-solid fa-database text-cyan-400"></i>
+            SQLite Database Records Explorer
+          </h2>
+          <p class="text-xs text-slate-400">
+            Customer inferences, prediction probabilities, and telemetry stored persistently in SQLite (<code class="font-mono text-cyan-300">data/drift_detective.db</code>).
+          </p>
+        </div>
+        <div class="flex items-center gap-3">
+          <div class="relative">
+            <input type="text" id="db-search-input" onkeyup="if(event.key === 'Enter') searchRecords()" placeholder="Search Customer ID..." class="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg pl-8 pr-3 py-2 w-48 font-mono focus:ring-1 focus:ring-cyan-500">
+            <i class="fa-solid fa-search absolute left-2.5 top-2.5 text-slate-500 text-xs"></i>
+          </div>
+          <button onclick="searchRecords()" class="px-3 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold">
+            Search
+          </button>
+          <button onclick="loadDatabaseRecords(1)" class="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold">
+            <i class="fa-solid fa-rotate"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Database Table -->
+      <div class="glass-card rounded-xl p-5 border border-slate-800 space-y-4">
+        <div class="flex items-center justify-between text-xs text-slate-400">
+          <div>Showing records in SQLite table: <span class="font-mono text-cyan-400 font-semibold">customer_inferences</span></div>
+          <div id="db-pagination-summary" class="font-mono">Page 1 of 1 (0 total records)</div>
+        </div>
+
+        <div class="overflow-x-auto custom-scrollbar">
+          <table class="w-full text-left text-xs">
+            <thead class="text-[11px] text-slate-400 uppercase bg-slate-900/60 border-b border-slate-800">
+              <tr>
+                <th class="py-3 px-3">ID</th>
+                <th class="py-3 px-3">Batch</th>
+                <th class="py-3 px-3">Customer ID</th>
+                <th class="py-3 px-3">Tenure</th>
+                <th class="py-3 px-3">Monthly $</th>
+                <th class="py-3 px-3">Calls</th>
+                <th class="py-3 px-3">Data GB</th>
+                <th class="py-3 px-3">Contract</th>
+                <th class="py-3 px-3">Internet</th>
+                <th class="py-3 px-3">Payment</th>
+                <th class="py-3 px-3">Churn Prob</th>
+                <th class="py-3 px-3">Predicted</th>
+                <th class="py-3 px-3">Actual</th>
+                <th class="py-3 px-3">Correct?</th>
+              </tr>
+            </thead>
+            <tbody id="db-records-tbody" class="divide-y divide-slate-800 font-mono text-slate-300">
+              <!-- Populated dynamically -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Pagination Controls -->
+        <div class="flex items-center justify-between pt-2">
+          <button id="db-prev-btn" onclick="prevRecordsPage()" class="px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed">
+            <i class="fa-solid fa-chevron-left mr-1"></i> Previous
+          </button>
+          <span id="db-page-indicator" class="text-xs font-mono text-slate-400">Page 1</span>
+          <button id="db-next-btn" onclick="nextRecordsPage()" class="px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed">
+            Next <i class="fa-solid fa-chevron-right ml-1"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 6: DATASET MANAGER & CSV UPLOAD -->
+    <div id="tab-upload" class="hidden space-y-6">
+      <div class="glass-card rounded-2xl p-5 border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h2 class="text-xl font-bold text-white flex items-center gap-2">
+            <i class="fa-solid fa-cloud-arrow-up text-emerald-400"></i>
+            Dataset Upload & Custom CSV Analyzer
+          </h2>
+          <p class="text-xs text-slate-400">
+            Upload custom CSV datasets to detect covariate drift and silent degradation against the baseline, or retrain the churn model.
+          </p>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-xs px-2.5 py-1 rounded-md bg-slate-800 text-slate-300 font-mono border border-slate-700">Supported: .csv files</span>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Left: Upload Zone & Form (2 cols) -->
+        <div class="lg:col-span-2 glass-card rounded-xl p-6 border border-slate-800 space-y-5">
+          <div class="space-y-1">
+            <h3 class="text-base font-bold text-white flex items-center gap-2">
+              <i class="fa-solid fa-file-csv text-emerald-400"></i>
+              Upload Customer Dataset (CSV)
+            </h3>
+            <p class="text-xs text-slate-400">
+              Columns supported: <code class="text-emerald-300 font-mono">tenure</code>, <code class="text-emerald-300 font-mono">monthly_charges</code>, <code class="text-emerald-300 font-mono">support_calls</code>, <code class="text-emerald-300 font-mono">data_usage_gb</code>, <code class="text-emerald-300 font-mono">contract</code>, <code class="text-emerald-300 font-mono">internet_service</code>, <code class="text-emerald-300 font-mono">payment_method</code>, <code class="text-emerald-300 font-mono">churn</code> (optional for production batches).
+            </p>
+          </div>
+
+          <!-- Mode Selection -->
+          <div class="space-y-2">
+            <label class="text-xs font-semibold text-slate-300 uppercase tracking-wider block">Select Analysis Mode:</label>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <label class="p-3.5 rounded-xl border border-slate-700 bg-slate-900/60 cursor-pointer hover:border-emerald-500 transition-all flex items-start gap-3">
+                <input type="radio" name="upload-mode" value="batch" checked class="mt-1 text-emerald-500">
+                <div>
+                  <div class="text-xs font-bold text-white flex items-center gap-1.5">
+                    <i class="fa-solid fa-chart-line text-emerald-400"></i> Analyze Production Batch
+                  </div>
+                  <p class="text-[11px] text-slate-400 pt-1">
+                    Detects covariate and concept drift, calculates PSI & KS p-values vs baseline, records alerts in database.
+                  </p>
+                </div>
+              </label>
+
+              <label class="p-3.5 rounded-xl border border-slate-700 bg-slate-900/60 cursor-pointer hover:border-indigo-500 transition-all flex items-start gap-3">
+                <input type="radio" name="upload-mode" value="baseline" class="mt-1 text-indigo-500">
+                <div>
+                  <div class="text-xs font-bold text-white flex items-center gap-1.5">
+                    <i class="fa-solid fa-arrows-rotate text-indigo-400"></i> Train New Baseline Model
+                  </div>
+                  <p class="text-[11px] text-slate-400 pt-1">
+                    Retrains model on new dataset, resets baseline drift references, increments version (Requires <code class="font-mono text-indigo-300">churn</code> column).
+                  </p>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <!-- Drag and Drop File Input -->
+          <div id="drop-zone" onclick="document.getElementById('csv-file-input').click()" class="border-2 border-dashed border-slate-700 hover:border-emerald-500 bg-slate-900/40 rounded-xl p-8 text-center cursor-pointer transition-all space-y-2">
+            <input type="file" id="csv-file-input" accept=".csv" class="hidden" onchange="handleFileSelected(event)">
+            <div class="w-12 h-12 rounded-xl bg-emerald-500/10 text-emerald-400 mx-auto flex items-center justify-center text-xl">
+              <i class="fa-solid fa-file-arrow-up"></i>
+            </div>
+            <div id="drop-zone-text" class="text-sm font-semibold text-slate-200">
+              Drag & Drop your CSV file here, or <span class="text-emerald-400 underline">browse</span>
+            </div>
+            <p class="text-xs text-slate-500">Maximum file size: 50MB (.csv format)</p>
+            <div id="selected-file-info" class="hidden pt-2 text-xs font-mono text-emerald-300 font-bold"></div>
+          </div>
+
+          <div class="flex items-center gap-4">
+            <input type="text" id="upload-batch-title" placeholder="Optional batch tag (e.g. Q4 Regional Cohort)" class="flex-1 bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-xl px-4 py-2.5 font-mono focus:ring-1 focus:ring-emerald-500">
+            <button id="upload-btn" onclick="executeUpload()" class="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/30 flex items-center gap-2 transition-all shrink-0">
+              <i class="fa-solid fa-cloud-arrow-up"></i>
+              <span>Upload & Analyze</span>
+            </button>
+          </div>
+
+          <!-- Upload Analysis Result Display -->
+          <div id="upload-result-box" class="hidden p-5 rounded-xl bg-slate-900/90 border border-slate-700 space-y-4 font-mono text-xs">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+
+        <!-- Right: Pre-Configured Sample Batches (1 col) -->
+        <div class="glass-card rounded-xl p-5 border border-slate-800 space-y-4">
+          <div class="space-y-1">
+            <h3 class="text-base font-bold text-white flex items-center gap-2">
+              <i class="fa-solid fa-vial-circle-check text-cyan-400"></i>
+              Pre-Configured Test Batches
+            </h3>
+            <p class="text-xs text-slate-400">1-click test datasets generated directly from realistic telemetry profiles</p>
+          </div>
+
+          <div class="space-y-3">
+            <!-- Sample 1 -->
+            <div class="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 space-y-2">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+                  <i class="fa-solid fa-circle-check text-[10px]"></i> Healthy Production Stream
+                </span>
+                <span class="text-[10px] font-mono text-slate-400">80 rows</span>
+              </div>
+              <p class="text-[11px] text-slate-400">Distribution matches baseline training data. Expected PSI &lt; 0.1.</p>
+              <div class="flex items-center gap-2 pt-1">
+                <button onclick="instantAnalyzeSample('healthy')" class="flex-1 py-1.5 rounded-lg bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 border border-emerald-500/40 text-[11px] font-semibold flex items-center justify-center gap-1">
+                  <i class="fa-solid fa-bolt"></i> Run Analysis
+                </button>
+                <a href="/api/datasets/sample-templates/healthy" download class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px]">
+                  <i class="fa-solid fa-download"></i>
+                </a>
+              </div>
+            </div>
+
+            <!-- Sample 2 -->
+            <div class="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 space-y-2">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-amber-400 flex items-center gap-1.5">
+                  <i class="fa-solid fa-headset text-[10px]"></i> Support Calls Surge
+                </span>
+                <span class="text-[10px] font-mono text-slate-400">80 rows</span>
+              </div>
+              <p class="text-[11px] text-slate-400">Covariate shift: Support calls spike to 5-10 and data usage rises.</p>
+              <div class="flex items-center gap-2 pt-1">
+                <button onclick="instantAnalyzeSample('support_spike')" class="flex-1 py-1.5 rounded-lg bg-amber-600/30 hover:bg-amber-600/50 text-amber-300 border border-amber-500/40 text-[11px] font-semibold flex items-center justify-center gap-1">
+                  <i class="fa-solid fa-bolt"></i> Run Analysis
+                </button>
+                <a href="/api/datasets/sample-templates/support_spike" download class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px]">
+                  <i class="fa-solid fa-download"></i>
+                </a>
+              </div>
+            </div>
+
+            <!-- Sample 3 -->
+            <div class="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 space-y-2">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-rose-400 flex items-center gap-1.5">
+                  <i class="fa-solid fa-triangle-exclamation text-[10px]"></i> Concept Drift Disruption
+                </span>
+                <span class="text-[10px] font-mono text-slate-400">80 rows</span>
+              </div>
+              <p class="text-[11px] text-slate-400">Competitor buyout: 2-year contracted loyal users unexpectedly churn.</p>
+              <div class="flex items-center gap-2 pt-1">
+                <button onclick="instantAnalyzeSample('concept_drift')" class="flex-1 py-1.5 rounded-lg bg-rose-600/30 hover:bg-rose-600/50 text-rose-300 border border-rose-500/40 text-[11px] font-semibold flex items-center justify-center gap-1">
+                  <i class="fa-solid fa-bolt"></i> Run Analysis
+                </button>
+                <a href="/api/datasets/sample-templates/concept_drift" download class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px]">
+                  <i class="fa-solid fa-download"></i>
+                </a>
+              </div>
+            </div>
+
+            <!-- Sample 4 -->
+            <div class="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 space-y-2">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-cyan-400 flex items-center gap-1.5">
+                  <i class="fa-solid fa-dollar-sign text-[10px]"></i> Price Inflation Shift
+                </span>
+                <span class="text-[10px] font-mono text-slate-400">80 rows</span>
+              </div>
+              <p class="text-[11px] text-slate-400">Covariate drift: Monthly bills shift upward into the $110-$155 range.</p>
+              <div class="flex items-center gap-2 pt-1">
+                <button onclick="instantAnalyzeSample('price_hike')" class="flex-1 py-1.5 rounded-lg bg-cyan-600/30 hover:bg-cyan-600/50 text-cyan-300 border border-cyan-500/40 text-[11px] font-semibold flex items-center justify-center gap-1">
+                  <i class="fa-solid fa-bolt"></i> Run Analysis
+                </button>
+                <a href="/api/datasets/sample-templates/price_hike" download class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px]">
+                  <i class="fa-solid fa-download"></i>
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- ================= AUTH MODAL (SIGN IN / REGISTER) ================= -->
+  <div id="auth-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="glass-card bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-5 relative">
+      <button onclick="closeAuthModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white">
+        <i class="fa-solid fa-xmark text-lg"></i>
+      </button>
+
+      <div class="text-center space-y-1">
+        <div class="w-12 h-12 rounded-xl bg-indigo-600/30 border border-indigo-500/40 text-indigo-400 mx-auto flex items-center justify-center text-xl mb-2">
+          <i class="fa-solid fa-shield-halved"></i>
+        </div>
+        <h3 id="auth-title" class="text-xl font-bold text-white">Sign In to Drift Detective</h3>
+        <p class="text-xs text-slate-400">Access MLOps model drift controls & telemetry logs</p>
+      </div>
+
+      <!-- Auth Tabs: Login vs Register -->
+      <div class="flex rounded-lg bg-slate-800 p-1 text-xs font-semibold">
+        <button id="auth-tab-login" onclick="switchAuthMode('login')" class="flex-1 py-1.5 rounded-md bg-indigo-600 text-white transition-all">Sign In</button>
+        <button id="auth-tab-register" onclick="switchAuthMode('register')" class="flex-1 py-1.5 rounded-md text-slate-400 hover:text-white transition-all">Create Account</button>
+      </div>
+
+      <!-- Quick 1-Click Demo Buttons -->
+      <div class="p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/20 space-y-2">
+        <div class="text-[11px] font-semibold text-indigo-300 uppercase tracking-wider flex items-center gap-1.5">
+          <i class="fa-solid fa-wand-magic-sparkles"></i> 1-Click Demo Logins:
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <button onclick="quickFillDemo('admin', 'admin123')" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono text-left flex items-center justify-between border border-slate-700">
+            <span>👑 admin</span>
+            <i class="fa-solid fa-arrow-right text-[10px] text-indigo-400"></i>
+          </button>
+          <button onclick="quickFillDemo('analyst', 'analyst123')" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono text-left flex items-center justify-between border border-slate-700">
+            <span>🔍 analyst</span>
+            <i class="fa-solid fa-arrow-right text-[10px] text-indigo-400"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Auth Form -->
+      <form id="auth-form" onsubmit="handleAuthSubmit(event)" class="space-y-4 text-xs">
+        <div>
+          <label class="block text-slate-300 font-medium mb-1">Username</label>
+          <input type="text" id="auth-username" required class="w-full bg-slate-800 border border-slate-700 text-white rounded-lg p-2.5 focus:ring-1 focus:ring-indigo-500 font-mono">
+        </div>
+
+        <div id="auth-email-group" class="hidden">
+          <label class="block text-slate-300 font-medium mb-1">Email Address</label>
+          <input type="email" id="auth-email" class="w-full bg-slate-800 border border-slate-700 text-white rounded-lg p-2.5 focus:ring-1 focus:ring-indigo-500 font-mono">
+        </div>
+
+        <div>
+          <label class="block text-slate-300 font-medium mb-1">Password</label>
+          <input type="password" id="auth-password" required class="w-full bg-slate-800 border border-slate-700 text-white rounded-lg p-2.5 focus:ring-1 focus:ring-indigo-500 font-mono">
+        </div>
+
+        <div id="auth-error" class="hidden p-2.5 rounded-lg bg-rose-500/20 border border-rose-500/40 text-rose-300 font-medium text-xs"></div>
+
+        <button type="submit" id="auth-submit-btn" class="w-full py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-md shadow-indigo-600/30 transition-all">
+          Sign In
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ================= NOTIFICATION TOAST ================= -->
+  <div id="toast" class="fixed bottom-5 right-5 z-50 hidden max-w-sm p-4 rounded-xl shadow-2xl border text-xs font-medium flex items-center gap-3 transition-all">
+    <i id="toast-icon" class="text-base"></i>
+    <span id="toast-msg"></span>
+  </div>
+
+  <!-- ================= APPLICATION SCRIPT ================= -->
+  <script>
+    let authToken = localStorage.getItem("drift_token") || null;
+    let currentUser = JSON.parse(localStorage.getItem("drift_user") || "null");
+    let currentAuthMode = "login";
+    let dbPage = 1;
+    let dbTotalPages = 1;
+    let trendChartInstance = null;
+    let predictionChartInstance = null;
+    let featureChartInstance = null;
+
+    function showToast(message, type = "info") {
+      const toast = document.getElementById("toast");
+      const msg = document.getElementById("toast-msg");
+      const icon = document.getElementById("toast-icon");
+      
+      msg.textContent = message;
+      if (type === "success") {
+        toast.className = "fixed bottom-5 right-5 z-50 flex items-center gap-3 p-4 rounded-xl shadow-2xl border bg-emerald-950 border-emerald-500/50 text-emerald-200 text-xs font-semibold";
+        icon.className = "fa-solid fa-circle-check text-emerald-400 text-base";
+      } else if (type === "error") {
+        toast.className = "fixed bottom-5 right-5 z-50 flex items-center gap-3 p-4 rounded-xl shadow-2xl border bg-rose-950 border-rose-500/50 text-rose-200 text-xs font-semibold";
+        icon.className = "fa-solid fa-triangle-exclamation text-rose-400 text-base";
+      } else {
+        toast.className = "fixed bottom-5 right-5 z-50 flex items-center gap-3 p-4 rounded-xl shadow-2xl border bg-slate-900 border-indigo-500/50 text-indigo-200 text-xs font-semibold";
+        icon.className = "fa-solid fa-info-circle text-indigo-400 text-base";
+      }
+      
+      toast.classList.remove("hidden");
+      setTimeout(() => toast.classList.add("hidden"), 4000);
+    }
+
+    function switchTab(tabId) {
+      document.querySelectorAll(".tab-btn").forEach(btn => {
+        btn.classList.remove("border-indigo-500", "text-white");
+        btn.classList.add("border-transparent", "text-slate-400");
+      });
+      const activeBtn = document.getElementById(`tab-btn-${tabId}`);
+      if (activeBtn) {
+        activeBtn.classList.remove("border-transparent", "text-slate-400");
+        activeBtn.classList.add("border-indigo-500", "text-white");
+      }
+
+      ['dashboard', 'detective', 'simulator', 'alerts', 'database', 'upload'].forEach(id => {
+        const el = document.getElementById(`tab-${id}`);
+        if (el) el.classList.toggle("hidden", id !== tabId);
+      });
+
+      if (tabId === "dashboard") loadDashboard();
+      if (tabId === "detective") updateFeatureChart();
+      if (tabId === "alerts") loadAlerts();
+      if (tabId === "database") loadDatabaseRecords(1);
+    }
+
+    function openAuthModal(mode = "login") {
+      switchAuthMode(mode);
+      document.getElementById("auth-modal").classList.remove("hidden");
+    }
+
+    function closeAuthModal() {
+      document.getElementById("auth-modal").classList.add("hidden");
+      document.getElementById("auth-error").classList.add("hidden");
+    }
+
+    function switchAuthMode(mode) {
+      currentAuthMode = mode;
+      const title = document.getElementById("auth-title");
+      const emailGroup = document.getElementById("auth-email-group");
+      const submitBtn = document.getElementById("auth-submit-btn");
+      const tabLogin = document.getElementById("auth-tab-login");
+      const tabRegister = document.getElementById("auth-tab-register");
+
+      if (mode === "register") {
+        title.textContent = "Create an Account";
+        emailGroup.classList.remove("hidden");
+        submitBtn.textContent = "Register & Sign In";
+        tabLogin.className = "flex-1 py-1.5 rounded-md text-slate-400 hover:text-white transition-all";
+        tabRegister.className = "flex-1 py-1.5 rounded-md bg-indigo-600 text-white transition-all";
+      } else {
+        title.textContent = "Sign In to Drift Detective";
+        emailGroup.classList.add("hidden");
+        submitBtn.textContent = "Sign In";
+        tabLogin.className = "flex-1 py-1.5 rounded-md bg-indigo-600 text-white transition-all";
+        tabRegister.className = "flex-1 py-1.5 rounded-md text-slate-400 hover:text-white transition-all";
+      }
+    }
+
+    function quickFillDemo(username, password) {
+      switchAuthMode('login');
+      document.getElementById("auth-username").value = username;
+      document.getElementById("auth-password").value = password;
+      document.getElementById("auth-form").dispatchEvent(new Event("submit"));
+    }
+
+    async function handleAuthSubmit(e) {
+      e.preventDefault();
+      const errBox = document.getElementById("auth-error");
+      errBox.classList.add("hidden");
+      
+      const username = document.getElementById("auth-username").value;
+      const password = document.getElementById("auth-password").value;
+      const email = document.getElementById("auth-email").value;
+
+      const endpoint = currentAuthMode === "register" ? "/api/auth/register" : "/api/auth/login";
+      const payload = currentAuthMode === "register" ? { username, email, password } : { username, password };
+
+      try {
+        const res = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          errBox.textContent = data.detail || "Authentication failed.";
+          errBox.classList.remove("hidden");
+          return;
+        }
+
+        authToken = data.token;
+        currentUser = data.user;
+        localStorage.setItem("drift_token", authToken);
+        localStorage.setItem("drift_user", JSON.stringify(currentUser));
+        
+        updateUserUI();
+        closeAuthModal();
+        showToast(`Signed in as ${currentUser.username} (${currentUser.role})`, "success");
+        loadDashboard();
+      } catch (err) {
+        errBox.textContent = err.message || "Network error occurred.";
+        errBox.classList.remove("hidden");
+      }
+    }
+
+    function updateUserUI() {
+      const loggedContainer = document.getElementById("user-logged-in-container");
+      const signInBtn = document.getElementById("sign-in-btn");
+      
+      if (authToken && currentUser) {
+        loggedContainer.classList.remove("hidden");
+        signInBtn.classList.add("hidden");
+        document.getElementById("nav-username").textContent = currentUser.username;
+        document.getElementById("nav-user-role").textContent = currentUser.role.toUpperCase();
+      } else {
+        loggedContainer.classList.add("hidden");
+        signInBtn.classList.remove("hidden");
+      }
+    }
+
+    async function handleLogout() {
+      if (authToken) {
+        try {
+          await fetch("/api/auth/logout", {
+            method: "POST",
+            headers: { "Authorization": `Bearer ${authToken}` }
+          });
+        } catch (_) {}
+      }
+      authToken = null;
+      currentUser = null;
+      localStorage.removeItem("drift_token");
+      localStorage.removeItem("drift_user");
+      updateUserUI();
+      showToast("Logged out successfully", "info");
+    }
+
+    // ----------------- DASHBOARD LOADER -----------------
+    async function loadDashboard() {
+      try {
+        const res = await fetch("/api/dashboard/summary");
+        const data = await res.json();
+
+        if (data.model) {
+          document.getElementById("nav-model-version").textContent = data.model.version;
+          document.getElementById("quick-model-version").textContent = data.model.version;
+          document.getElementById("quick-model-accuracy").textContent = (data.model.accuracy * 100).toFixed(1) + "%";
+          document.getElementById("quick-model-f1").textContent = data.model.f1.toFixed(3);
+          document.getElementById("quick-model-auc").textContent = data.model.roc_auc.toFixed(3);
+        }
+
+        document.getElementById("metric-psi").textContent = data.current_drift_score.toFixed(3);
+        document.getElementById("metric-accuracy").textContent = (data.current_accuracy * 100).toFixed(1) + "%";
+        document.getElementById("metric-acc-drop").textContent = "Base: " + (data.baseline_accuracy * 100).toFixed(1) + "%";
+        
+        const accDelta = ((data.current_accuracy - data.baseline_accuracy) * 100).toFixed(1);
+        const accDeltaEl = document.getElementById("metric-acc-delta");
+        if (accDelta < -8) {
+          accDeltaEl.textContent = `Severe degradation (${accDelta}%)`;
+          accDeltaEl.className = "text-[11px] text-rose-400 font-bold";
+        } else if (accDelta < -3) {
+          accDeltaEl.textContent = `Mild drift detected (${accDelta}%)`;
+          accDeltaEl.className = "text-[11px] text-amber-400";
+        } else {
+          accDeltaEl.textContent = `Performance is nominal (${accDelta >= 0 ? '+' : ''}${accDelta}%)`;
+          accDeltaEl.className = "text-[11px] text-emerald-400";
+        }
+
+        document.getElementById("metric-alerts-count").textContent = data.active_alerts_count;
+        const alertStatusBadge = document.getElementById("metric-alerts-status");
+        if (data.active_alerts_count > 0) {
+          alertStatusBadge.textContent = `${data.active_alerts_count} Unresolved`;
+          alertStatusBadge.className = "text-xs font-semibold px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-400";
+          document.getElementById("alerts-badge").textContent = data.active_alerts_count;
+          document.getElementById("alerts-badge").classList.remove("hidden");
+        } else {
+          alertStatusBadge.textContent = "All Clear";
+          alertStatusBadge.className = "text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400";
+          document.getElementById("alerts-badge").classList.add("hidden");
+        }
+
+        document.getElementById("metric-inferences").textContent = data.total_inferences.toLocaleString();
+        document.getElementById("metric-batches").textContent = `${data.total_batches} Batches`;
+
+        const navPill = document.getElementById("live-status-pill");
+        const navText = document.getElementById("live-status-text");
+        const heroBanner = document.getElementById("hero-banner");
+        const heroTag = document.getElementById("hero-status-tag");
+        const heroHead = document.getElementById("hero-headline");
+        const heroSumm = document.getElementById("hero-summary");
+
+        if (data.status === "CRITICAL_DRIFT") {
+          navPill.className = "flex items-center space-x-2 px-3 py-1.5 rounded-full bg-rose-500/20 border border-rose-500/40 text-rose-400 text-xs font-semibold glow-danger";
+          navText.textContent = "CRITICAL DRIFT DETECTED";
+          heroBanner.className = "glass-card rounded-2xl p-5 sm:p-6 border border-rose-500/40 bg-gradient-to-r from-rose-950/40 via-slate-900 to-slate-900 relative overflow-hidden";
+          heroTag.textContent = "CRITICAL DEGRADATION";
+          heroTag.className = "text-xs uppercase font-bold tracking-widest px-2.5 py-1 rounded-md bg-rose-500/20 text-rose-300 border border-rose-500/40 font-mono";
+          heroHead.textContent = "Silent Model Degradation Detected in Production";
+          heroSumm.textContent = data.latest_batch ? data.latest_batch.summary : "Statistical hypothesis tests indicate significant shift in feature distributions and accuracy degradation.";
+        } else if (data.status === "WARNING_DRIFT") {
+          navPill.className = "flex items-center space-x-2 px-3 py-1.5 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-400 text-xs font-semibold glow-warning";
+          navText.textContent = "WARNING: COVARIATE DRIFT";
+          heroBanner.className = "glass-card rounded-2xl p-5 sm:p-6 border border-amber-500/40 bg-gradient-to-r from-amber-950/40 via-slate-900 to-slate-900 relative overflow-hidden";
+          heroTag.textContent = "COVARIATE DRIFT WARNING";
+          heroTag.className = "text-xs uppercase font-bold tracking-widest px-2.5 py-1 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/40 font-mono";
+          heroHead.textContent = "Input Feature Distribution Shifting from Training Baseline";
+          heroSumm.textContent = data.latest_batch ? data.latest_batch.summary : "Elevated PSI detected on customer tenure and pricing features.";
+        } else {
+          navPill.className = "flex items-center space-x-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-semibold glow-healthy";
+          navText.textContent = "HEALTHY (No Drift)";
+          heroBanner.className = "glass-card rounded-2xl p-5 sm:p-6 border border-emerald-500/30 bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 relative overflow-hidden";
+          heroTag.textContent = "MODEL IN EQUILIBRIUM";
+          heroTag.className = "text-xs uppercase font-bold tracking-widest px-2.5 py-1 rounded-md bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-mono";
+          heroHead.textContent = "AI Classifier Operating Within Normal Drift Tolerances";
+          heroSumm.textContent = "Continuously comparing live customer inference batches against the 2,000 baseline records. KS test and PSI indicate feature stability.";
+        }
+
+        const tbody = document.getElementById("recent-batches-tbody");
+        if (data.recent_batches && data.recent_batches.length > 0) {
+          tbody.innerHTML = data.recent_batches.map(b => {
+            let statusBadge = `<span class="px-2 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">HEALTHY</span>`;
+            if (b.drift_status === "CRITICAL_DRIFT") {
+              statusBadge = `<span class="px-2 py-0.5 rounded text-[10px] bg-rose-500/20 text-rose-400 border border-rose-500/30 font-bold">CRITICAL</span>`;
+            } else if (b.drift_status === "WARNING_DRIFT") {
+              statusBadge = `<span class="px-2 py-0.5 rounded text-[10px] bg-amber-500/20 text-amber-400 border border-amber-500/30">WARNING</span>`;
+            }
+            return `
+              <tr class="hover:bg-slate-800/50 transition-colors">
+                <td class="py-2.5 px-3 font-bold text-white">${b.batch_code}</td>
+                <td class="py-2.5 px-3 font-sans text-slate-300 capitalize">${b.scenario.replace('_', ' ')}</td>
+                <td class="py-2.5 px-3">${b.sample_count}</td>
+                <td class="py-2.5 px-3 font-bold ${b.drift_score >= 0.2 ? 'text-rose-400' : 'text-slate-300'}">${b.drift_score.toFixed(3)}</td>
+                <td class="py-2.5 px-3">${b.accuracy ? (b.accuracy * 100).toFixed(1) + '%' : 'N/A'}</td>
+                <td class="py-2.5 px-3">${statusBadge}</td>
+                <td class="py-2.5 px-3">
+                  <button onclick="inspectBatch('${b.id}')" class="text-indigo-400 hover:text-indigo-300 text-xs">
+                    Inspect
+                  </button>
+                </td>
+              </tr>
+            `;
+          }).join('');
+        }
+
+        await loadTrendChart();
+        await loadPredictionChart();
+      } catch (err) {
+        console.error("Dashboard load failed:", err);
+      }
+    }
+
+    // ----------------- CHARTS -----------------
+    async function loadTrendChart() {
+      try {
+        const res = await fetch("/api/metrics/trends?limit=15");
+        const data = await res.json();
+        const batches = data.batches || [];
+        
+        const labels = batches.map(b => b.batch_code);
+        const psiData = batches.map(b => b.drift_score);
+        const accData = batches.map(b => (b.accuracy * 100).toFixed(1));
+
+        const ctx = document.getElementById("trendChart").getContext("2d");
+        if (trendChartInstance) trendChartInstance.destroy();
+
+        trendChartInstance = new Chart(ctx, {
+          type: "line",
+          data: {
+            labels: labels.length ? labels : ["Baseline"],
+            datasets: [
+              {
+                label: "Drift Index (PSI)",
+                data: psiData.length ? psiData : [0.04],
+                borderColor: "#f59e0b",
+                backgroundColor: "rgba(245, 158, 11, 0.15)",
+                yAxisID: "y-psi",
+                tension: 0.3,
+                fill: true,
+                pointRadius: 4,
+                pointHoverRadius: 6
+              },
+              {
+                label: "Accuracy (%)",
+                data: accData.length ? accData : [66.6],
+                borderColor: "#6366f1",
+                backgroundColor: "rgba(99, 102, 241, 0.15)",
+                yAxisID: "y-acc",
+                tension: 0.3,
+                fill: true,
+                pointRadius: 4,
+                pointHoverRadius: 6
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+              legend: { labels: { color: "#94a3b8", font: { size: 11 } } },
+              tooltip: { backgroundColor: "#0f172a", titleColor: "#f1f5f9", bodyColor: "#cbd5e1", borderColor: "#334155", borderWidth: 1 }
+            },
+            scales: {
+              x: { grid: { color: "rgba(51, 65, 85, 0.3)" }, ticks: { color: "#94a3b8", font: { size: 10 } } },
+              "y-psi": {
+                type: 'linear',
+                display: true,
+                position: 'left',
+                grid: { color: "rgba(51, 65, 85, 0.3)" },
+                ticks: { color: "#f59e0b", font: { size: 10 } },
+                title: { display: true, text: 'PSI Drift Score', color: '#f59e0b', font: { size: 10 } }
+              },
+              "y-acc": {
+                type: 'linear',
+                display: true,
+                position: 'right',
+                min: 30,
+                max: 100,
+                grid: { drawOnChartArea: false },
+                ticks: { color: "#6366f1", font: { size: 10 } },
+                title: { display: true, text: 'Accuracy %', color: '#6366f1', font: { size: 10 } }
+              }
+            }
+          }
+        });
+      } catch (err) {
+        console.error("Trend chart load error:", err);
+      }
+    }
+
+    async function loadPredictionChart() {
+      try {
+        const ctx = document.getElementById("predictionChart").getContext("2d");
+        if (predictionChartInstance) predictionChartInstance.destroy();
+
+        const labels = ["0.0-0.1", "0.1-0.2", "0.2-0.3", "0.3-0.4", "0.4-0.5", "0.5-0.6", "0.6-0.7", "0.7-0.8", "0.8-0.9", "0.9-1.0"];
+        
+        predictionChartInstance = new Chart(ctx, {
+          type: "bar",
+          data: {
+            labels: labels,
+            datasets: [
+              {
+                label: "Baseline Distribution",
+                data: [0.38, 0.22, 0.12, 0.08, 0.05, 0.04, 0.04, 0.03, 0.02, 0.02],
+                backgroundColor: "rgba(99, 102, 241, 0.75)",
+                borderRadius: 4
+              },
+              {
+                label: "Production Inferences",
+                data: [0.19, 0.14, 0.10, 0.08, 0.09, 0.12, 0.11, 0.09, 0.05, 0.03],
+                backgroundColor: "rgba(6, 182, 212, 0.75)",
+                borderRadius: 4
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { labels: { color: "#94a3b8", font: { size: 11 } } },
+              tooltip: { backgroundColor: "#0f172a", titleColor: "#f1f5f9", bodyColor: "#cbd5e1", borderColor: "#334155", borderWidth: 1 }
+            },
+            scales: {
+              x: { grid: { color: "rgba(51, 65, 85, 0.3)" }, ticks: { color: "#94a3b8", font: { size: 10 } } },
+              y: { grid: { color: "rgba(51, 65, 85, 0.3)" }, ticks: { color: "#94a3b8", font: { size: 10 } } }
+            }
+          }
+        });
+      } catch (err) {
+        console.error("Prediction chart error:", err);
+      }
+    }
+
+    // ----------------- FEATURE INSPECTOR -----------------
+    async function updateFeatureChart() {
+      const feat = document.getElementById("feature-select").value;
+      try {
+        const res = await fetch(`/api/features/distribution?feature=${feat}`);
+        const data = await res.json();
+        
+        document.getElementById("feature-chart-title").textContent = `Distribution Comparison: ${data.feature}`;
+        document.getElementById("feature-chart-subtitle").textContent = data.type === "numerical" 
+          ? `Baseline Mean: ${data.baseline_mean} | Production Mean: ${data.production_mean}` 
+          : `Proportion comparisons across category values`;
+
+        const ctx = document.getElementById("featureDistChart").getContext("2d");
+        if (featureChartInstance) featureChartInstance.destroy();
+
+        featureChartInstance = new Chart(ctx, {
+          type: "bar",
+          data: {
+            labels: data.labels,
+            datasets: [
+              {
+                label: "Training Baseline (Expected)",
+                data: data.baseline,
+                backgroundColor: "rgba(99, 102, 241, 0.75)",
+                borderColor: "#6366f1",
+                borderWidth: 1,
+                borderRadius: 4
+              },
+              {
+                label: "Current Production Batches",
+                data: data.production,
+                backgroundColor: "rgba(245, 158, 11, 0.75)",
+                borderColor: "#f59e0b",
+                borderWidth: 1,
+                borderRadius: 4
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { labels: { color: "#94a3b8", font: { size: 11 } } },
+              tooltip: { backgroundColor: "#0f172a", titleColor: "#f1f5f9", bodyColor: "#cbd5e1" }
+            },
+            scales: {
+              x: { grid: { color: "rgba(51, 65, 85, 0.3)" }, ticks: { color: "#94a3b8", font: { size: 10 } } },
+              y: { grid: { color: "rgba(51, 65, 85, 0.3)" }, ticks: { color: "#94a3b8", font: { size: 10 } } }
+            }
+          }
+        });
+
+        loadFeatureMatrix();
+      } catch (err) {
+        console.error("Feature chart error:", err);
+      }
+    }
+
+    async function loadFeatureMatrix() {
+      try {
+        const tbody = document.getElementById("features-matrix-tbody");
+
+        const featuresList = [
+          { name: "monthly_charges", type: "Numerical", psi: 0.28, ks: 0.22, p: "<0.001", base: "$70.09", prod: "$87.60", status: "CRITICAL" },
+          { name: "support_calls", type: "Numerical", psi: 0.35, ks: 0.31, p: "<0.001", base: "2.08 calls", prod: "5.40 calls", status: "CRITICAL" },
+          { name: "data_usage_gb", type: "Numerical", psi: 0.19, ks: 0.15, p: "0.002", base: "26.14 GB", prod: "42.80 GB", status: "WARNING" },
+          { name: "tenure", type: "Numerical", psi: 0.08, ks: 0.07, p: "0.185", base: "25.39 mo", prod: "24.90 mo", status: "STABLE" },
+          { name: "contract", type: "Categorical", psi: 0.24, ks: "--", p: "--", base: "M2M: 60.5%", prod: "M2M: 85.0%", status: "CRITICAL" },
+          { name: "internet_service", type: "Categorical", psi: 0.04, ks: "--", p: "--", base: "Fiber: 50.0%", prod: "Fiber: 52.0%", status: "STABLE" },
+          { name: "payment_method", type: "Categorical", psi: 0.03, ks: "--", p: "--", base: "Card: 32.0%", prod: "Card: 31.5%", status: "STABLE" }
+        ];
+
+        tbody.innerHTML = featuresList.map(f => {
+          let badge = `<span class="px-2 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-400">STABLE</span>`;
+          if (f.status === "CRITICAL") {
+            badge = `<span class="px-2 py-0.5 rounded text-[10px] bg-rose-500/20 text-rose-400 font-bold">CRITICAL</span>`;
+          } else if (f.status === "WARNING") {
+            badge = `<span class="px-2 py-0.5 rounded text-[10px] bg-amber-500/20 text-amber-400 font-bold">WARNING</span>`;
+          }
+          return `
+            <tr class="hover:bg-slate-800/40">
+              <td class="py-2.5 px-3 font-bold text-white font-mono">${f.name}</td>
+              <td class="py-2.5 px-3 font-sans text-slate-400">${f.type}</td>
+              <td class="py-2.5 px-3 font-bold ${f.psi >= 0.2 ? 'text-rose-400' : (f.psi >= 0.1 ? 'text-amber-400' : 'text-emerald-400')}">${f.psi.toFixed(2)}</td>
+              <td class="py-2.5 px-3">${f.ks}</td>
+              <td class="py-2.5 px-3">${f.p}</td>
+              <td class="py-2.5 px-3">${f.base}</td>
+              <td class="py-2.5 px-3">${f.prod}</td>
+              <td class="py-2.5 px-3">${badge}</td>
+            </tr>
+          `;
+        }).join('');
+      } catch (err) {
+        console.error("Matrix load error:", err);
+      }
+    }
+
+    // ----------------- SIMULATOR EXECUTION -----------------
+    async function executeBatchSimulation() {
+      const scenario = document.querySelector('input[name="scenario-radio"]:checked').value;
+      const sampleCount = parseInt(document.getElementById("batch-sample-slider").value);
+      const btn = document.getElementById("run-simulation-btn");
+      const resultBox = document.getElementById("sim-result-box");
+
+      btn.disabled = true;
+      btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Analyzing Stream...`;
+
+      try {
+        const res = await fetch("/api/simulator/run-batch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ scenario: scenario, sample_count: sampleCount })
+        });
+        const data = await res.json();
+        
+        resultBox.classList.remove("hidden");
+        const a = data.analysis;
+        
+        let statusColor = "text-emerald-400";
+        if (a.overall_status === "CRITICAL_DRIFT") statusColor = "text-rose-400";
+        if (a.overall_status === "WARNING_DRIFT") statusColor = "text-amber-400";
+
+        resultBox.innerHTML = `
+          <div class="flex items-center justify-between pb-2 border-b border-slate-700">
+            <span class="font-bold text-white">Batch ${data.batch_code} Processed (${data.sample_count} customers)</span>
+            <span class="${statusColor} font-bold">${a.overall_status}</span>
+          </div>
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-slate-300">
+            <div>PSI Drift Index: <span class="font-bold text-white">${a.overall_drift_score}</span></div>
+            <div>Batch Accuracy: <span class="font-bold text-white">${(a.batch_accuracy*100).toFixed(1)}%</span></div>
+            <div>Accuracy Drop: <span class="font-bold ${a.accuracy_drop > 0.08 ? 'text-rose-400' : 'text-slate-200'}">-${(a.accuracy_drop*100).toFixed(1)}%</span></div>
+            <div>Drifted Features: <span class="font-bold text-white">${a.drifted_features.length}</span></div>
+          </div>
+          <p class="text-slate-400 text-[11px] pt-1"><i class="fa-solid fa-quote-left mr-1 text-slate-500"></i> ${a.summary}</p>
+        `;
+
+        showToast(`Simulation complete: ${data.batch_code} (${a.overall_status})`, a.overall_status === "HEALTHY" ? "success" : "error");
+        loadDashboard();
+      } catch (err) {
+        showToast("Simulation error: " + err.message, "error");
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = `<i class="fa-solid fa-play"></i> Simulate & Analyze Batch`;
+      }
+    }
+
+    async function handleSinglePredict(e) {
+      e.preventDefault();
+      const tenure = parseFloat(document.getElementById("input-tenure").value);
+      const charges = parseFloat(document.getElementById("input-charges").value);
+      const calls = parseInt(document.getElementById("input-support").value);
+      const dataGb = parseFloat(document.getElementById("input-data").value);
+      const contract = document.getElementById("input-contract").value;
+      const internet = document.getElementById("input-internet").value;
+      const payment = document.getElementById("input-payment").value;
+
+      try {
+        const res = await fetch("/api/simulator/single-predict", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            tenure: tenure,
+            monthly_charges: charges,
+            support_calls: calls,
+            data_usage_gb: dataGb,
+            contract: contract,
+            internet_service: internet,
+            payment_method: payment
+          })
+        });
+        const data = await res.json();
+
+        const outBox = document.getElementById("single-output");
+        outBox.classList.remove("hidden");
+        document.getElementById("single-prob-val").textContent = `${(data.churn_probability * 100).toFixed(1)}%`;
+        
+        const bar = document.getElementById("single-prob-bar");
+        bar.style.width = `${Math.min(100, data.churn_probability * 100)}%`;
+        
+        const badge = document.getElementById("single-risk-badge");
+        const predLabel = document.getElementById("single-pred-label");
+        
+        if (data.predicted_churn === 1) {
+          bar.className = "bg-rose-500 h-2.5 rounded-full transition-all";
+          badge.className = "px-2 py-0.5 rounded-full font-semibold bg-rose-500/20 text-rose-400";
+          badge.textContent = data.risk_level;
+          predLabel.textContent = "WILL CHURN";
+          predLabel.className = "font-mono font-bold text-rose-400";
+        } else {
+          bar.className = "bg-emerald-500 h-2.5 rounded-full transition-all";
+          badge.className = "px-2 py-0.5 rounded-full font-semibold bg-emerald-500/20 text-emerald-400";
+          badge.textContent = data.risk_level;
+          predLabel.textContent = "WILL RETAIN";
+          predLabel.className = "font-mono font-bold text-emerald-400";
+        }
+
+        const outDev = document.getElementById("single-outliers-box");
+        if (data.outlier_deviations && data.outlier_deviations.length > 0) {
+          outDev.innerHTML = `<i class="fa-solid fa-triangle-exclamation mr-1"></i> Out-of-Distribution Warning: ${data.outlier_deviations.join(', ')}`;
+          outDev.classList.remove("hidden");
+        } else {
+          outDev.classList.add("hidden");
+        }
+      } catch (err) {
+        showToast("Predict error: " + err.message, "error");
+      }
+    }
+
+    // ----------------- ALERTS & REMEDIATION -----------------
+    async function loadAlerts(status = "all") {
+      try {
+        const url = status === "active" ? "/api/alerts?status=active" : "/api/alerts";
+        const res = await fetch(url);
+        const data = await res.json();
+        const container = document.getElementById("alerts-list-container");
+
+        if (!data.alerts || data.alerts.length === 0) {
+          container.innerHTML = `
+            <div class="glass-card rounded-xl p-8 text-center text-slate-400 space-y-2 border border-slate-800">
+              <i class="fa-solid fa-shield-check text-4xl text-emerald-400"></i>
+              <div class="text-base font-bold text-white">No Active Model Incidents</div>
+              <p class="text-xs">All monitored features and prediction accuracies are within statistical tolerance.</p>
+            </div>
+          `;
+          return;
+        }
+
+        container.innerHTML = data.alerts.map(a => {
+          const isCrit = a.severity === "CRITICAL";
+          const borderClass = isCrit ? "border-rose-500/40 bg-rose-950/20" : "border-amber-500/40 bg-amber-950/20";
+          const badgeClass = isCrit ? "bg-rose-500/20 text-rose-300 border-rose-500/40" : "bg-amber-500/20 text-amber-300 border-amber-500/40";
+          
+          return `
+            <div class="glass-card rounded-xl p-4 border ${borderClass} flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div class="space-y-1">
+                <div class="flex items-center gap-2">
+                  <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${badgeClass}">${a.severity}</span>
+                  <span class="text-xs font-mono text-slate-400">${a.timestamp.replace('T', ' ').slice(0, 19)}</span>
+                  <span class="text-xs font-bold text-white">${a.alert_type}</span>
+                  ${a.batch_code ? `<span class="text-xs font-mono text-indigo-400 font-semibold">[${a.batch_code}]</span>` : ''}
+                </div>
+                <div class="text-sm font-semibold text-slate-200">${a.message}</div>
+                <div class="text-xs font-mono text-slate-400">${a.details || ''}</div>
+              </div>
+              <div class="flex items-center gap-2 shrink-0">
+                ${a.is_resolved 
+                  ? `<span class="text-xs font-mono text-emerald-400 flex items-center gap-1"><i class="fa-solid fa-check"></i> Resolved</span>`
+                  : `<button onclick="resolveAlert(${a.id})" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700">Acknowledge</button>`
+                }
+              </div>
+            </div>
+          `;
+        }).join('');
+      } catch (err) {
+        console.error("Alerts load error:", err);
+      }
+    }
+
+    async function resolveAlert(alertId) {
+      if (!authToken) {
+        showToast("Please sign in to manage alerts.", "error");
+        openAuthModal('login');
+        return;
+      }
+      try {
+        const res = await fetch(`/api/alerts/${alertId}/resolve`, {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${authToken}` }
+        });
+        if (res.ok) {
+          showToast(`Alert #${alertId} marked resolved`, "success");
+          loadAlerts();
+          loadDashboard();
+        }
+      } catch (err) {
+        showToast("Error resolving alert: " + err.message, "error");
+      }
+    }
+
+    async function triggerRetrain() {
+      if (!authToken) {
+        showToast("Please sign in (admin/analyst) to initiate model retraining.", "error");
+        openAuthModal('login');
+        return;
+      }
+
+      showToast("Model retraining initiated. Fine-tuning on verified production batches...", "info");
+      try {
+        const res = await fetch("/api/model/retrain", {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${authToken}` }
+        });
+        const data = await res.json();
+        if (res.ok) {
+          showToast(`Success! Retrained to ${data.new_version}. Baseline reset and alerts cleared.`, "success");
+          loadDashboard();
+          loadAlerts();
+        } else {
+          showToast(data.detail || "Retraining failed", "error");
+        }
+      } catch (err) {
+        showToast("Retraining error: " + err.message, "error");
+      }
+    }
+
+    // ----------------- SQLITE DATABASE RECORDS -----------------
+    async function loadDatabaseRecords(page = 1) {
+      dbPage = page;
+      const search = document.getElementById("db-search-input").value.trim();
+      try {
+        const url = `/api/database/records?page=${page}&page_size=20${search ? `&search=${encodeURIComponent(search)}` : ''}`;
+        const res = await fetch(url);
+        const data = await res.json();
+
+        dbTotalPages = Math.ceil(data.total / data.page_size) || 1;
+        document.getElementById("db-pagination-summary").textContent = `Page ${data.page} of ${dbTotalPages} (${data.total.toLocaleString()} records in SQLite)`;
+        document.getElementById("db-page-indicator").textContent = `Page ${data.page} of ${dbTotalPages}`;
+        document.getElementById("db-prev-btn").disabled = data.page <= 1;
+        document.getElementById("db-next-btn").disabled = data.page >= dbTotalPages;
+
+        const tbody = document.getElementById("db-records-tbody");
+        if (!data.records || data.records.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="14" class="py-6 text-center text-slate-500 font-sans">No customer records in SQLite matching query.</td></tr>`;
+          return;
+        }
+
+        tbody.innerHTML = data.records.map(r => {
+          const isPredChurn = r.predicted_churn === 1;
+          const predBadge = isPredChurn 
+            ? `<span class="px-2 py-0.5 rounded text-[10px] bg-rose-500/20 text-rose-400 font-bold">CHURN</span>`
+            : `<span class="px-2 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-400">RETAIN</span>`;
+
+          const actualBadge = r.actual_churn !== null 
+            ? (r.actual_churn === 1 ? `<span class="text-rose-400">1</span>` : `<span class="text-emerald-400">0</span>`)
+            : `<span class="text-slate-500">N/A</span>`;
+
+          const correctBadge = r.is_correct !== null
+            ? (r.is_correct === 1 ? `<i class="fa-solid fa-check text-emerald-400"></i>` : `<i class="fa-solid fa-xmark text-rose-400"></i>`)
+            : `<span class="text-slate-500">--</span>`;
+
+          return `
+            <tr class="hover:bg-slate-800/40">
+              <td class="py-2.5 px-3 font-mono text-slate-400">#${r.id}</td>
+              <td class="py-2.5 px-3 font-mono text-indigo-400">${r.batch_id ? 'B-' + r.batch_id : 'SINGLE'}</td>
+              <td class="py-2.5 px-3 font-bold text-white font-mono">${r.customer_id}</td>
+              <td class="py-2.5 px-3">${r.tenure} mo</td>
+              <td class="py-2.5 px-3">$${r.monthly_charges.toFixed(2)}</td>
+              <td class="py-2.5 px-3 font-bold ${r.support_calls >= 4 ? 'text-amber-400' : 'text-slate-300'}">${r.support_calls}</td>
+              <td class="py-2.5 px-3">${r.data_usage_gb} GB</td>
+              <td class="py-2.5 px-3 font-sans text-slate-300 capitalize">${r.contract}</td>
+              <td class="py-2.5 px-3 font-sans text-slate-300 capitalize">${r.internet_service}</td>
+              <td class="py-2.5 px-3 font-sans text-slate-300 capitalize">${r.payment_method}</td>
+              <td class="py-2.5 px-3 font-mono font-bold ${(r.churn_prob >= 0.5) ? 'text-rose-400' : 'text-slate-300'}">${(r.churn_prob * 100).toFixed(1)}%</td>
+              <td class="py-2.5 px-3">${predBadge}</td>
+              <td class="py-2.5 px-3 font-bold">${actualBadge}</td>
+              <td class="py-2.5 px-3 text-center">${correctBadge}</td>
+            </tr>
+          `;
+        }).join('');
+      } catch (err) {
+        console.error("Database records error:", err);
+      }
+    }
+
+    function searchRecords() {
+      loadDatabaseRecords(1);
+    }
+
+    function prevRecordsPage() {
+      if (dbPage > 1) loadDatabaseRecords(dbPage - 1);
+    }
+
+    function nextRecordsPage() {
+      if (dbPage < dbTotalPages) loadDatabaseRecords(dbPage + 1);
+    }
+
+    async function seedDemoData() {
+      showToast("Seeding realistic historical production batches...", "info");
+      try {
+        const res = await fetch("/api/database/seed-demo", { method: "POST" });
+        const data = await res.json();
+        if (data.success) {
+          showToast(`Successfully seeded ${data.batches_seeded} historical batches into SQLite!`, "success");
+          loadDashboard();
+        }
+      } catch (err) {
+        showToast("Error seeding demo: " + err.message, "error");
+      }
+    }
+
+    function inspectBatch(batchId) {
+      switchTab('detective');
+      showToast(`Inspecting feature distributions for Batch #${batchId}`, "info");
+    }
+
+    // ----------------- DATASET UPLOAD & ANALYSIS -----------------
+    let selectedCsvFile = null;
+
+    function handleFileSelected(event) {
+      const file = event.target.files[0];
+      if (file) {
+        selectedCsvFile = file;
+        const info = document.getElementById("selected-file-info");
+        info.textContent = `Selected: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+        info.classList.remove("hidden");
+        document.getElementById("drop-zone-text").textContent = `File ready for upload: ${file.name}`;
+      }
+    }
+
+    async function executeUpload() {
+      if (!selectedCsvFile) {
+        showToast("Please choose or drag & drop a CSV file first.", "error");
+        return;
+      }
+
+      const mode = document.querySelector('input[name="upload-mode"]:checked').value;
+      const title = document.getElementById("upload-batch-title").value.trim();
+      const btn = document.getElementById("upload-btn");
+      const resBox = document.getElementById("upload-result-box");
+
+      btn.disabled = true;
+      btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Processing Dataset...`;
+
+      const formData = new FormData();
+      formData.append("file", selectedCsvFile);
+
+      if (mode === "batch") {
+        if (title) formData.append("batch_title", title);
+        try {
+          const res = await fetch("/api/datasets/upload-batch", {
+            method: "POST",
+            body: formData
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.detail || "Upload analysis failed");
+
+          const a = data.analysis;
+          let statusColor = "text-emerald-400";
+          if (a.overall_status === "CRITICAL_DRIFT") statusColor = "text-rose-400";
+          if (a.overall_status === "WARNING_DRIFT") statusColor = "text-amber-400";
+
+          resBox.classList.remove("hidden");
+          resBox.innerHTML = `
+            <div class="flex items-center justify-between pb-2 border-b border-slate-700">
+              <span class="font-bold text-white text-sm"><i class="fa-solid fa-circle-check text-emerald-400 mr-1.5"></i> Batch ${data.batch_code} Successfully Analyzed</span>
+              <span class="${statusColor} font-bold text-xs px-2.5 py-1 rounded-full bg-slate-800 border border-slate-700">${a.overall_status}</span>
+            </div>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-slate-300">
+              <div>Records Parsed: <span class="font-bold text-white">${data.total_records}</span></div>
+              <div>PSI Drift Score: <span class="font-bold text-white">${a.overall_drift_score}</span></div>
+              <div>Batch Accuracy: <span class="font-bold text-white">${(a.batch_accuracy * 100).toFixed(1)}%</span></div>
+              <div>Drifted Features: <span class="font-bold ${a.drifted_features.length > 0 ? 'text-amber-400' : 'text-emerald-400'}">${a.drifted_features.length > 0 ? a.drifted_features.join(', ') : 'None'}</span></div>
+            </div>
+            <p class="text-slate-400 text-xs italic"><i class="fa-solid fa-quote-left mr-1 text-slate-500"></i> ${a.summary}</p>
+            <div class="flex items-center gap-3 pt-2">
+              <button onclick="switchTab('dashboard')" class="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs flex items-center gap-1.5 shadow-md shadow-indigo-600/30">
+                <i class="fa-solid fa-chart-area"></i> View in Dashboard
+              </button>
+              <button onclick="switchTab('detective')" class="px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs flex items-center gap-1.5 border border-slate-700">
+                <i class="fa-solid fa-magnifying-glass-chart"></i> Inspect Distributions
+              </button>
+            </div>
+          `;
+
+          showToast(`Custom dataset analyzed: ${data.total_records} rows (${a.overall_status})`, a.overall_status === "HEALTHY" ? "success" : "warning");
+          loadDashboard();
+        } catch (err) {
+          showToast(err.message, "error");
+        } finally {
+          btn.disabled = false;
+          btn.innerHTML = `<i class="fa-solid fa-cloud-arrow-up"></i> Upload & Analyze`;
+        }
+      } else {
+        // Mode B: Baseline Training
+        if (!authToken) {
+          showToast("Please sign in (admin/analyst) to set a new baseline model.", "error");
+          openAuthModal('login');
+          btn.disabled = false;
+          btn.innerHTML = `<i class="fa-solid fa-cloud-arrow-up"></i> Upload & Analyze`;
+          return;
+        }
+
+        try {
+          const res = await fetch("/api/datasets/upload-baseline", {
+            method: "POST",
+            headers: { "Authorization": `Bearer ${authToken}` },
+            body: formData
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.detail || "Baseline training failed");
+
+          resBox.classList.remove("hidden");
+          resBox.innerHTML = `
+            <div class="flex items-center justify-between pb-2 border-b border-slate-700">
+              <span class="font-bold text-white text-sm"><i class="fa-solid fa-wand-magic-sparkles text-indigo-400 mr-1.5"></i> Model Retrained to ${data.new_version}</span>
+              <span class="text-emerald-400 font-bold text-xs px-2.5 py-1 rounded-full bg-emerald-500/20">BASELINE ACTIVE</span>
+            </div>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-slate-300">
+              <div>Training Samples: <span class="font-bold text-white">${data.sample_count}</span></div>
+              <div>Accuracy: <span class="font-bold text-white">${(data.metrics.accuracy * 100).toFixed(1)}%</span></div>
+              <div>F1-Score: <span class="font-bold text-white">${data.metrics.f1.toFixed(3)}</span></div>
+              <div>ROC-AUC: <span class="font-bold text-white">${data.metrics.roc_auc.toFixed(3)}</span></div>
+            </div>
+            <p class="text-slate-300 text-xs">${data.message}</p>
+          `;
+
+          showToast(data.message, "success");
+          loadDashboard();
+        } catch (err) {
+          showToast(err.message, "error");
+        } finally {
+          btn.disabled = false;
+          btn.innerHTML = `<i class="fa-solid fa-cloud-arrow-up"></i> Upload & Analyze`;
+        }
+      }
+    }
+
+    async function instantAnalyzeSample(sampleName) {
+      showToast(`Fetching ${sampleName} sample batch...`, "info");
+      try {
+        const sampleRes = await fetch(`/api/datasets/sample-templates/${sampleName}`);
+        const blob = await sampleRes.blob();
+        selectedCsvFile = new File([blob], `${sampleName}_batch.csv`, { type: "text/csv" });
+        
+        document.getElementById("upload-batch-title").value = `Sample: ${sampleName.replace('_', ' ').toUpperCase()}`;
+        document.querySelector('input[name="upload-mode"][value="batch"]').checked = true;
+        
+        const info = document.getElementById("selected-file-info");
+        info.textContent = `Loaded Sample: ${selectedCsvFile.name} (${(blob.size / 1024).toFixed(1)} KB)`;
+        info.classList.remove("hidden");
+        document.getElementById("drop-zone-text").textContent = `Loaded sample ready for execution!`;
+
+        await executeUpload();
+      } catch (err) {
+        showToast("Error testing sample: " + err.message, "error");
+      }
+    }
+
+    window.addEventListener("DOMContentLoaded", () => {
+      updateUserUI();
+      loadDashboard();
+    });
+  </script>
+</body>
+</html>

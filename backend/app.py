@@ -87,8 +87,8 @@ async def analyze(file: UploadFile = File(...)):
     """Profile any readable CSV; run drift analysis when model features are present."""
     try:
         raw = await file.read()
-        if len(raw) > 10 * 1024 * 1024:
-            raise HTTPException(413, "CSV is too large. Maximum size is 10 MB.")
+        if len(raw) > 50 * 1024 * 1024:
+            raise HTTPException(413, "CSV is too large. Maximum size is 50 MB.")
 
         df = pd.read_csv(io.BytesIO(raw))
         expected = set(svc.num + svc.cat)
@@ -132,6 +132,87 @@ def retrain():
         return dict(new_baseline=svc.retrain())
     except ValueError as e:
         raise HTTPException(400, str(e))
+
+
+# SQLite Auth Endpoints
+import hashlib, sqlite3
+from pydantic import BaseModel
+from typing import Optional
+
+DB_FILE = os.path.join(os.path.dirname(__file__), "..", "churnguard_users.db")
+
+class AuthPayload(BaseModel):
+    name: Optional[str] = "MLOps Engineer"
+    email: str
+    password: str
+    role: Optional[str] = "Lead MLOps Engineer"
+
+def get_db():
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        email TEXT UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        role TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        last_login TEXT,
+        login_count INTEGER DEFAULT 0
+    )
+    """)
+    conn.commit()
+    return conn
+
+@app.post("/api/auth/login")
+def auth_login(payload: AuthPayload):
+    conn = get_db()
+    cursor = conn.cursor()
+    email = payload.email.strip().lower()
+    password_hash = hashlib.sha256(payload.password.strip().encode()).hexdigest()
+    cursor.execute("SELECT id, name, email, role, password_hash, login_count FROM users WHERE email = ?", (email,))
+    row = cursor.fetchone()
+    if row and row[4] == password_hash:
+        now = datetime.now().isoformat()
+        new_count = (row[5] or 0) + 1
+        cursor.execute("UPDATE users SET last_login = ?, login_count = ? WHERE id = ?", (now, new_count, row[0]))
+        conn.commit()
+        conn.close()
+        return {"success": True, "user": {"id": row[0], "name": row[1], "email": row[2], "role": row[3]}}
+    conn.close()
+    raise HTTPException(401, "Invalid email or password")
+
+@app.post("/api/auth/register")
+def auth_register(payload: AuthPayload):
+    conn = get_db()
+    cursor = conn.cursor()
+    email = payload.email.strip().lower()
+    name = (payload.name or "MLOps Engineer").strip()
+    role = (payload.role or "Lead MLOps Engineer").strip()
+    password_hash = hashlib.sha256(payload.password.strip().encode()).hexdigest()
+    now = datetime.now().isoformat()
+    try:
+        cursor.execute("""
+            INSERT INTO users (name, email, password_hash, role, created_at, last_login, login_count)
+            VALUES (?, ?, ?, ?, ?, ?, 1)
+        """, (name, email, password_hash, role, now, now))
+        user_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        return {"success": True, "user": {"id": user_id, "name": name, "email": email, "role": role}}
+    except sqlite3.IntegrityError:
+        conn.close()
+        raise HTTPException(409, "Email already exists")
+
+@app.get("/api/auth/users")
+def auth_users():
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, name, email, role, created_at, last_login, login_count FROM users ORDER BY id DESC")
+    rows = cursor.fetchall()
+    conn.close()
+    return {"success": True, "users": [{ "id": r[0], "name": r[1], "email": r[2], "role": r[3], "createdAt": r[4], "lastLogin": r[5], "loginCount": r[6]} for r in rows]}
 
 
 # Serve the dashboard at "/"
